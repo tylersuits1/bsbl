@@ -1,0 +1,65 @@
+Screen {
+    align: center top;
+}
+
+#masthead {
+    padding: 1 2 0 2;
+}
+
+#summary {
+    padding: 0 2 1 2;
+}
+
+#innings {
+    padding: 0 2 1 2;
+}
+
+#section-toggle-hint {
+    padding: 0 2;
+    color: $text-muted;
+}
+
+.section {
+    padding: 0 2 1 2;
+    border-top: heavy $foreground 30%;
+}
+
+.section-title {
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#headlines-box {
+    padding: 0 2 1 2;
+    border-top: heavy $foreground 30%;
+}
+
+#body-scroll {
+    height: 1fr;
+}
+
+#picker-title {
+    text-style: bold;
+    padding: 1 2;
+}
+
+#search {
+    margin: 0 2 1 2;
+}
+
+#picker-body {
+    height: 1fr;
+}
+
+#help-box {
+    align: center middle;
+    background: $panel;
+    border: heavy $foreground;
+    padding: 2 4;
+    width: 50;
+    height: auto;
+}
+
+HelpScreen {
+    align: center middle;
+}

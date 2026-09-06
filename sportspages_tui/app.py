@@ -1,0 +1,244 @@
+"""SportsPages TUI — a newspaper-styled terminal client for following MLB
+games, in the spirit of Newsboat: launch into a scrollable page for your
+followed teams, arrow left/right between them, arrow up/down through the
+news, single-letter hotkeys for everything else.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from rich.console import Group
+from textual import work
+from textual.app import App, ComposeResult
+from textual.containers import VerticalScroll
+from textual.widgets import Footer, Static
+
+from . import config, mlb_teams
+from .date_format import format_full_date
+from .mlb_api import MlbNewsService, MlbStatsError, MlbStatsService, headlines_for_team
+from .models import BoxScore, Headline, PlayerStat
+from .rendering import (
+    batting_order_columns,
+    detail_lines,
+    headline_list,
+    inning_table,
+    masthead,
+    matchup_line,
+    player_stats_table,
+    status_line,
+)
+from .screens.help import HelpScreen
+from .screens.team_picker import TeamPickerScreen
+
+LIVE_REFRESH_SECONDS = 20
+
+
+class MainScreen(VerticalScroll):
+    """The whole scrollable page for one followed team — masthead down
+    through headlines. A plain container (not a Screen) so the App can
+    swap its content per team without pushing/popping screens.
+    """
+
+    can_focus = True
+
+    def __init__(self) -> None:
+        super().__init__(id="body-scroll")
+        self.show_stats = False
+        self.show_batting = False
+
+    def compose(self) -> ComposeResult:
+        yield Static(id="masthead")
+        yield Static(id="summary")
+        yield Static(id="innings")
+        yield Static(id="batting-section", classes="section")
+        yield Static(id="stats-section", classes="section")
+        yield Static(id="headlines-box")
+
+    def render_team(self, team: mlb_teams.TeamInfo, box: BoxScore, headlines: list[Headline], stats: list[PlayerStat]) -> None:
+        today = format_full_date(datetime.now())
+        self.query_one("#masthead", Static).update(masthead(team.full_name, box.followed_team_record, today))
+
+        lines = [matchup_line(box), status_line(box), *detail_lines(box)]
+        self.query_one("#summary", Static).update(Group(*lines))
+
+        self.query_one("#innings", Static).update(inning_table(box))
+
+        batting_widget = self.query_one("#batting-section", Static)
+        if self.show_batting:
+            batting_widget.update(Group("[bold]BATTING ORDER[/bold] [dim](b to hide)[/dim]", "", batting_order_columns(box)))
+            batting_widget.display = True
+        else:
+            batting_widget.display = False
+
+        stats_widget = self.query_one("#stats-section", Static)
+        if self.show_stats:
+            if stats:
+                stats_widget.update(Group(
+                    "[bold]PLAYER STATS[/bold] [dim](s to hide)[/dim]", "",
+                    player_stats_table(stats, pitchers=False), "",
+                    player_stats_table(stats, pitchers=True),
+                ))
+            else:
+                stats_widget.update("[bold]PLAYER STATS[/bold] [dim](s to hide)[/dim]\n\n[italic]No stats available.[/italic]")
+            stats_widget.display = True
+        else:
+            stats_widget.display = False
+
+        self.query_one("#headlines-box", Static).update(
+            Group("[bold]HEADLINES[/bold]", "", headline_list(headlines))
+        )
+
+
+class SportsPagesApp(App):
+    CSS_PATH = "app.tcss"
+    TITLE = "The Sports Pages"
+
+    BINDINGS = [
+        ("left", "prev_team", "Prev Team"),
+        ("right", "next_team", "Next Team"),
+        ("up", "scroll_up", "Scroll Up"),
+        ("down", "scroll_down", "Scroll Down"),
+        ("s", "toggle_stats", "Stats"),
+        ("b", "toggle_batting", "Batting"),
+        ("r", "refresh_now", "Refresh"),
+        ("a", "manage_teams", "Follow"),
+        ("p", "toggle_live", "Pause Live"),
+        ("d", "toggle_dark", "Theme"),
+        ("question_mark", "show_help", "Help"),
+        ("q", "quit", "Quit"),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stats_service = MlbStatsService()
+        self.news_service = MlbNewsService()
+        self.current_index = 0
+        self.teams: list[mlb_teams.TeamInfo] = []
+        self.headlines: list[Headline] = []
+        self.live_paused = False
+        self._live_timer = None
+        self._body: MainScreen | None = None
+
+    def compose(self) -> ComposeResult:
+        self._body = MainScreen()
+        yield self._body
+        yield Footer()
+
+    async def on_mount(self) -> None:
+        self._load_teams()
+        if not self.teams:
+            await self._open_picker(first_run=True)
+        else:
+            self._start_live_timer()
+            self.load_current_team()
+        self._refresh_headlines()
+
+    def _load_teams(self) -> None:
+        abbrs = config.load_favorites()
+        self.teams = [t for a in abbrs if (t := mlb_teams.team_by_abbreviation(a))]
+        if self.current_index >= len(self.teams):
+            self.current_index = max(0, len(self.teams) - 1)
+
+    async def _open_picker(self, first_run: bool = False) -> None:
+        await self.push_screen(TeamPickerScreen(), callback=lambda _: self._on_picker_closed())
+
+    def _on_picker_closed(self) -> None:
+        self._load_teams()
+        if self.teams:
+            self._start_live_timer()
+            self.load_current_team()
+        self._refresh_headlines()
+
+    def _start_live_timer(self) -> None:
+        if self._live_timer:
+            self._live_timer.stop()
+        self._live_timer = self.set_interval(LIVE_REFRESH_SECONDS, self._auto_refresh)
+
+    @property
+    def current_team(self) -> mlb_teams.TeamInfo | None:
+        if not self.teams:
+            return None
+        return self.teams[self.current_index]
+
+    @work(exclusive=True)
+    async def load_current_team(self) -> None:
+        team = self.current_team
+        if not team or not self._body:
+            return
+        try:
+            box = await self.stats_service.fetch_game_for_team(team)
+            stats = await self.stats_service.fetch_player_stats(team) if self._body.show_stats else []
+        except MlbStatsError as e:
+            self.notify(f"Could not load {team.full_name}: {e}", severity="error")
+            return
+        relevant = headlines_for_team(self.headlines, team_city=team.city, team_name=team.name)
+        self._body.render_team(team, box, relevant, stats)
+        if box.status.value == "FINAL" and self._live_timer:
+            self._live_timer.pause()
+
+    @work(exclusive=True, group="headlines")
+    async def _refresh_headlines(self) -> None:
+        try:
+            self.headlines = await self.news_service.fetch_headlines()
+        except MlbStatsError:
+            self.headlines = []
+        self.load_current_team()
+
+    def _auto_refresh(self) -> None:
+        if not self.live_paused:
+            self.load_current_team()
+
+    # -- actions -------------------------------------------------------
+
+    def action_prev_team(self) -> None:
+        if not self.teams:
+            return
+        self.current_index = (self.current_index - 1) % len(self.teams)
+        self.load_current_team()
+
+    def action_next_team(self) -> None:
+        if not self.teams:
+            return
+        self.current_index = (self.current_index + 1) % len(self.teams)
+        self.load_current_team()
+
+    def action_scroll_up(self) -> None:
+        if self._body:
+            self._body.scroll_up()
+
+    def action_scroll_down(self) -> None:
+        if self._body:
+            self._body.scroll_down()
+
+    def action_toggle_stats(self) -> None:
+        if not self._body:
+            return
+        self._body.show_stats = not self._body.show_stats
+        self.load_current_team()
+
+    def action_toggle_batting(self) -> None:
+        if not self._body:
+            return
+        self._body.show_batting = not self._body.show_batting
+        self.load_current_team()
+
+    def action_refresh_now(self) -> None:
+        self._refresh_headlines()
+
+    async def action_manage_teams(self) -> None:
+        await self._open_picker()
+
+    def action_toggle_live(self) -> None:
+        self.live_paused = not self.live_paused
+        self.notify("Live refresh paused" if self.live_paused else "Live refresh resumed")
+
+    def action_toggle_dark(self) -> None:
+        self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
+
+    async def action_show_help(self) -> None:
+        await self.push_screen(HelpScreen())
+
+    async def on_unmount(self) -> None:
+        await self.stats_service.aclose()
+        await self.news_service.aclose()
