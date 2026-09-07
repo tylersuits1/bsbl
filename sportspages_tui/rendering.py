@@ -13,6 +13,7 @@ from rich.text import Text
 
 from .date_format import format_clock_time, format_short_datetime, ordinal_inning
 from .models import BoxScore, GameStatus, PlayerStat
+from .ncaaf_models import NcaafBoxScore, NcaafGameLeader, NcaafStandingEntry
 
 _STATUS_STYLE = {
     GameStatus.LIVE: "bold red",
@@ -172,6 +173,96 @@ def refresh_status_line(last_updated, paused: bool) -> Text:
     else:
         line.append("Not yet updated", style="dim italic")
     return line
+
+
+def ncaaf_matchup_line(box: NcaafBoxScore) -> Text:
+    away, home = box.away, box.home
+    away_label = f"#{away.ap_rank} {away.name}" if away.ap_rank else away.name
+    home_label = f"#{home.ap_rank} {home.name}" if home.ap_rank else home.name
+    if box.status == GameStatus.SCHEDULED and not box.away_quarters and not box.home_quarters:
+        return Text(f"{away_label} @ {home_label}", style="bold")
+    return Text(f"{away_label} {away.score} | {home_label} {home.score}", style="bold")
+
+
+def ncaaf_status_line(box: NcaafBoxScore) -> Text:
+    line = Text()
+    line.append_text(status_text(box.status))
+    detail = box.status_detail.strip()
+    if detail and detail.lower() != box.status.value.lower():
+        line.append(f"  {detail.upper()}")
+    return line
+
+
+def ncaaf_detail_lines(box: NcaafBoxScore) -> list[str]:
+    lines = []
+    parts = []
+    if box.venue:
+        parts.append(box.venue)
+    if box.weather:
+        parts.append(box.weather)
+    if box.money_line:
+        parts.append(f"ML {box.money_line}")
+    if parts:
+        lines.append("  |  ".join(parts))
+
+    if box.status == GameStatus.FINAL and box.next_game:
+        ng = box.next_game
+        prefix = "@" if ng.is_away else "vs "
+        lines.append("")
+        lines.append(f"UP NEXT: {prefix}{ng.opponent} · {format_short_datetime(ng.start)}")
+
+    return lines
+
+
+def quarter_table(box: NcaafBoxScore) -> Table:
+    q_count = max(len(box.away_quarters), len(box.home_quarters), 4)
+    table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False)
+    table.add_column("", width=5)
+    for i in range(1, q_count + 1):
+        label = str(i) if i <= 4 else ("OT" if i == 5 else f"{i - 4}OT")
+        table.add_column(label, justify="center", width=4)
+    table.add_column("T", justify="center", width=4, style="bold")
+
+    def row(label: str, quarters: list, total: int) -> list[str]:
+        cells = [label]
+        for i in range(q_count):
+            value = quarters[i] if i < len(quarters) else None
+            cells.append("–" if value in (None, "") else str(value))
+        cells.append(str(total))
+        return cells
+
+    table.add_row(*row(box.away.abbreviation or "AWAY", box.away_quarters, box.away.score))
+    table.add_row(*row(box.home.abbreviation or "HOME", box.home_quarters, box.home.score))
+    return table
+
+
+def standings_table(entries: list[NcaafStandingEntry]) -> Table:
+    table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False, expand=True)
+    table.add_column("TEAM", ratio=3)
+    table.add_column("CONF", justify="center", ratio=1)
+    table.add_column("OVERALL", justify="center", ratio=1)
+    for e in entries:
+        table.add_row(e.team_name, e.conference_record, e.overall_record)
+    return table
+
+
+def leaders_group(
+    away_leaders: list[NcaafGameLeader], home_leaders: list[NcaafGameLeader], away_label: str, home_label: str
+) -> Table:
+    def block(label: str, leaders: list[NcaafGameLeader]) -> Group:
+        lines = [Text(label, style="bold")]
+        if not leaders:
+            lines.append(Text("No leaders reported", style="italic dim"))
+        else:
+            for leader in leaders:
+                lines.append(Text(f"{leader.category}: {leader.player_name} ({leader.position}) — {leader.stat_line}"))
+        return Group(*lines)
+
+    table = Table.grid(padding=(0, 3))
+    table.add_column()
+    table.add_column()
+    table.add_row(block(away_label, away_leaders), block(home_label, home_leaders))
+    return table
 
 
 def masthead(team_name: str, record: str, today: str, *, page: int, total_pages: int) -> Group:

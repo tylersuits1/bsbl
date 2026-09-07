@@ -11,14 +11,20 @@ _KEYS = [
     ("← / →", "Switch between followed teams"),
     ("↑ / ↓", "Move through the headlines list"),
     ("enter", "Open the highlighted headline in your browser"),
-    ("s", "Toggle player stats"),
-    ("b", "Toggle batting order"),
+    ("s", "Toggle stats (MLB) / game leaders (NCAAF)"),
+    ("b", "Toggle batting order (MLB) / standings (NCAAF)"),
     ("r", "Refresh now"),
-    ("a", "Follow / unfollow teams"),
+    ("a", "Follow / unfollow teams — search or browse by division/conference"),
     ("p", "Pause / resume live auto-refresh"),
     ("d", "Toggle dark / light theme"),
     ("?", "This help screen"),
     ("q", "Quit"),
+]
+
+_PICKER_KEYS = [
+    ("f2", "Switch between MLB and NCAAF"),
+    ("enter", "Expand/collapse a group, or follow/unfollow a team"),
+    ("escape", "Ask to exit, listing your followed teams (y/n)"),
 ]
 
 
@@ -28,6 +34,11 @@ class HelpScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         lines = ["[bold]KEYS[/bold]", ""]
         for key, desc in _KEYS:
+            lines.append(f"  [bold]{key:<8}[/bold] {desc}")
+        lines.append("")
+        lines.append("[bold]IN THE TEAM PICKER (a)[/bold]")
+        lines.append("")
+        for key, desc in _PICKER_KEYS:
             lines.append(f"  [bold]{key:<8}[/bold] {desc}")
         lines.append("")
         lines.append("[dim]Press Esc or ? to close[/dim]")

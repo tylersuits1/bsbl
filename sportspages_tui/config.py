@@ -14,32 +14,48 @@ FAVORITES_FILE = CONFIG_DIR / "favorites.json"
 MAX_FAVORITES = 8
 
 
-def load_favorites() -> list[str]:
+def load_favorites() -> list[tuple[str, str]]:
+    """Returns (sport, abbreviation) pairs, sport one of "MLB"/"NCAAF".
+    Favorites files written before NCAAF existed stored bare MLB
+    abbreviations (e.g. "ATL") — those are read back as ("MLB", "ATL").
+    """
     if not FAVORITES_FILE.exists():
         return []
     try:
         data = json.loads(FAVORITES_FILE.read_text())
-        return [str(a) for a in data.get("abbreviations", [])]
+        raw = data.get("teams", data.get("abbreviations", []))
     except (json.JSONDecodeError, OSError):
         return []
 
+    result = []
+    for entry in raw:
+        entry = str(entry)
+        if ":" in entry:
+            sport, abbr = entry.split(":", 1)
+        else:
+            sport, abbr = "MLB", entry
+        result.append((sport, abbr))
+    return result
 
-def save_favorites(abbreviations: list[str]) -> None:
+
+def save_favorites(entries: list[tuple[str, str]]) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    FAVORITES_FILE.write_text(json.dumps({"abbreviations": abbreviations}, indent=2))
+    raw = [f"{sport}:{abbr}" for sport, abbr in entries]
+    FAVORITES_FILE.write_text(json.dumps({"teams": raw}, indent=2))
 
 
-def toggle_favorite(abbreviation: str) -> tuple[list[str], bool]:
+def toggle_favorite(sport: str, abbreviation: str) -> tuple[list[tuple[str, str]], bool]:
     """Returns (updated list, applied). Fails (applied=False) if adding
     would exceed MAX_FAVORITES.
     """
     current = load_favorites()
-    if abbreviation in current:
-        current.remove(abbreviation)
+    key = (sport, abbreviation)
+    if key in current:
+        current.remove(key)
         save_favorites(current)
         return current, True
     if len(current) >= MAX_FAVORITES:
         return current, False
-    current.append(abbreviation)
+    current.append(key)
     save_favorites(current)
     return current, True

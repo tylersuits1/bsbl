@@ -66,12 +66,30 @@ Screen {
     padding: 1 2;
 }
 
-#search {
+#search-row {
+    height: 3;
     margin: 0 2 1 2;
+}
+
+#search {
+    width: 1fr;
+}
+
+#clear-search {
+    width: 5;
+    min-width: 5;
 }
 
 #picker-body {
     height: 1fr;
+}
+
+#confirm-box {
+    display: none;
+    margin: 1 2;
+    padding: 1 2;
+    border: heavy $foreground 30%;
+    height: auto;
 }
 
 #help-box {

@@ -9,7 +9,7 @@ from sportspages_tui.app import SportsPagesApp
 
 
 async def main() -> None:
-    config.save_favorites(["ATL", "MIL", "NYY"])
+    config.save_favorites([("MLB", "ATL"), ("MLB", "MIL"), ("NCAAF", "UGA")])
     app = SportsPagesApp()
     async with app.run_test(size=(100, 45)) as pilot:
         await pilot.pause(4)
