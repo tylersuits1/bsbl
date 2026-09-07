@@ -31,6 +31,7 @@ class TeamPickerScreen(Screen):
         # leak into this screen's footer, or silently mutate the hidden
         # page behind it (e.g. pressing 's' here toggling its stats panel).
         Binding("s", "noop", show=False),
+        Binding("l", "noop", show=False),
         Binding("r", "noop", show=False),
         Binding("a", "noop", show=False),
         Binding("d", "noop", show=False),

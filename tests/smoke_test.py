@@ -49,12 +49,23 @@ async def main() -> None:
         batting_widget = app.screen.query_one("#batting-section")
         assert batting_widget.display is True
 
-        # Cross into the NCAAF team — same toggle keys should now show
-        # standings/leaders instead of batting/stats without crashing.
+        # Cross into the NCAAF team — 's' should now drive standings (not
+        # MLB stats), and 'l' drives leaders, its own dedicated key.
         await pilot.press("right")
         await pilot.pause(3)
         print("=== After right arrow (into NCAAF) ===", app.current_team.full_name)
         assert app.current_team.sport == "NCAAF" and app.current_team.abbreviation == "UGA"
+
+        await pilot.press("s")
+        await pilot.pause(2)
+        print("=== NCAAF 's' — show_standings ===", app._body.show_standings, "show_stats unchanged:", app._body.show_stats)
+        assert app._body.show_standings is True
+        assert app._body.show_stats is True  # untouched, still set from the MLB team above
+
+        await pilot.press("l")
+        await pilot.pause(2)
+        print("=== NCAAF 'l' — show_leaders ===", app._body.show_leaders)
+        assert app._body.show_leaders is True
 
         await pilot.press("left")
         await pilot.press("left")

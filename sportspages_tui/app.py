@@ -87,8 +87,10 @@ class MainScreen(VerticalScroll):
 
     def __init__(self) -> None:
         super().__init__(id="body-scroll")
-        self.show_stats = False
-        self.show_batting = False
+        self.show_stats = False       # MLB: player stats (s)
+        self.show_batting = False     # MLB: batting order (b)
+        self.show_standings = False   # NCAAF: conference standings (s)
+        self.show_leaders = False     # NCAAF: game leaders (l)
 
     def compose(self) -> ComposeResult:
         yield Static(id="masthead")
@@ -170,32 +172,33 @@ class MainScreen(VerticalScroll):
 
         self.query_one("#innings", Static).update(quarter_table(box))
 
-        # "Batting" -> conference standings, "Stats" -> game leaders —
-        # football's nearest equivalents, kept on the same b/s toggle
-        # keys and the same widget slots as the MLB view.
-        batting_widget = self.query_one("#batting-section", Static)
-        if self.show_batting:
+        # Football's nearest equivalents of batting order/player stats —
+        # standings on the same 's' key MLB uses for stats, leaders on
+        # its own 'l' key (there's no natural single letter shared with
+        # MLB's batting order, so it gets a dedicated one).
+        standings_widget = self.query_one("#batting-section", Static)
+        if self.show_standings:
             if box.division_standings:
-                batting_widget.update(Group("[bold]STANDINGS (-b)[/bold]", "", standings_table(box.division_standings)))
+                standings_widget.update(Group("[bold]STANDINGS (-s)[/bold]", "", standings_table(box.division_standings)))
             else:
-                batting_widget.update("[bold]STANDINGS (-b)[/bold]\n\n[italic]No standings available.[/italic]")
+                standings_widget.update("[bold]STANDINGS (-s)[/bold]\n\n[italic]No standings available.[/italic]")
         else:
-            batting_widget.update("[bold]STANDINGS (+b)[/bold]")
+            standings_widget.update("[bold]STANDINGS (+s)[/bold]")
 
-        stats_widget = self.query_one("#stats-section", Static)
-        if self.show_stats:
+        leaders_widget = self.query_one("#stats-section", Static)
+        if self.show_leaders:
             if box.away_leaders or box.home_leaders:
-                stats_widget.update(Group(
-                    "[bold]LEADERS (-s)[/bold]", "",
+                leaders_widget.update(Group(
+                    "[bold]LEADERS (-l)[/bold]", "",
                     leaders_group(
                         box.away_leaders, box.home_leaders,
                         box.away.abbreviation or "AWAY", box.home.abbreviation or "HOME",
                     ),
                 ))
             else:
-                stats_widget.update("[bold]LEADERS (-s)[/bold]\n\n[italic]No leaders reported.[/italic]")
+                leaders_widget.update("[bold]LEADERS (-l)[/bold]\n\n[italic]No leaders reported.[/italic]")
         else:
-            stats_widget.update("[bold]LEADERS (+s)[/bold]")
+            leaders_widget.update("[bold]LEADERS (+l)[/bold]")
 
         self._render_headlines(headlines)
 
@@ -221,6 +224,7 @@ class SportsPagesApp(App):
         ("down", "scroll_down", "Scroll Down"),
         ("s", "toggle_stats", "Stats"),
         ("b", "toggle_batting", "Batting"),
+        ("l", "toggle_leaders", "Leaders"),
         ("r", "refresh_now", "Refresh"),
         ("a", "manage_teams", "Follow"),
         ("p", "toggle_live", "Pause Live"),
@@ -423,13 +427,23 @@ class SportsPagesApp(App):
     def action_toggle_stats(self) -> None:
         if not self._body:
             return
-        self._body.show_stats = not self._body.show_stats
+        followed = self.current_team
+        if followed and followed.sport == "NCAAF":
+            self._body.show_standings = not self._body.show_standings
+        else:
+            self._body.show_stats = not self._body.show_stats
         self.load_current_team()
 
     def action_toggle_batting(self) -> None:
         if not self._body:
             return
         self._body.show_batting = not self._body.show_batting
+        self.load_current_team()
+
+    def action_toggle_leaders(self) -> None:
+        if not self._body:
+            return
+        self._body.show_leaders = not self._body.show_leaders
         self.load_current_team()
 
     def action_refresh_now(self) -> None:
