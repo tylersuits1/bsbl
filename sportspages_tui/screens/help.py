@@ -9,7 +9,8 @@ from textual.widgets import Static
 
 _KEYS = [
     ("← / →", "Switch between followed teams"),
-    ("↑ / ↓", "Scroll headlines / page content"),
+    ("↑ / ↓", "Move through the headlines list"),
+    ("enter", "Open the highlighted headline in your browser"),
     ("s", "Toggle player stats"),
     ("b", "Toggle batting order"),
     ("r", "Refresh now"),

@@ -174,13 +174,14 @@ def refresh_status_line(last_updated, paused: bool) -> Text:
     return line
 
 
-def masthead(team_name: str, record: str, today: str) -> Group:
+def masthead(team_name: str, record: str, today: str, *, page: int, total_pages: int) -> Group:
     date_line = Align.center(Text(f"THE SPORTS PAGES · {today}", style="dim"))
     name_line = Align.center(Text(team_name.upper(), style="bold"))
-    record_line = Align.center(Text(record, style="dim")) if record else None
+    page_text = f"Page {page}/{total_pages}"
+    below_name = Text.assemble((record, "dim")) if record else Text()
+    if record:
+        below_name.append("   ·   ", style="dim")
+    below_name.append(page_text, style="dim")
+    below_name_line = Align.center(below_name)
     rule = Rule(style="bold", characters="═")
-    parts = [date_line, name_line]
-    if record_line:
-        parts.append(record_line)
-    parts.append(rule)
-    return Group(*parts)
+    return Group(date_line, name_line, below_name_line, rule)

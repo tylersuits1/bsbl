@@ -9,13 +9,10 @@ from sportspages_tui.app import SportsPagesApp
 
 
 async def main() -> None:
-    config.save_favorites(["ATL"])
+    config.save_favorites(["ATL", "MIL", "NYY"])
     app = SportsPagesApp()
-    async with app.run_test(size=(100, 55)) as pilot:
-        await pilot.pause(3)
-        app.action_toggle_batting()
-        app.action_toggle_stats()
-        await pilot.pause(2)
+    async with app.run_test(size=(100, 45)) as pilot:
+        await pilot.pause(4)
         svg = app.export_screenshot()
         Path("tests/screenshot.svg").write_text(svg)
         print("saved tests/screenshot.svg")

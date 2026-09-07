@@ -24,6 +24,8 @@ async def main() -> None:
         print("=== Initial team ===", app.current_team.full_name)
         assert app.current_team.abbreviation == "ATL"
         assert app.last_updated is not None
+        print("=== Page ===", f"{app.current_index + 1}/{len(app.teams)}")
+        assert app.current_index == 0 and len(app.teams) == 2
 
         headline_list = app.screen.query_one("#headlines-list", ListView)
         print("=== Headline items in list ===", len(headline_list))
@@ -38,12 +40,14 @@ async def main() -> None:
         await pilot.pause(2)
         print("=== After 's' — show_stats ===", app._body.show_stats)
         assert app._body.show_stats is True
-        hint_text = str(app.query_one("#hint-bar").renderable if hasattr(app.query_one("#hint-bar"), "renderable") else "")
 
         await pilot.press("b")
         await pilot.pause(1)
+        print("=== After 'b' — show_batting ===", app._body.show_batting)
+        assert app._body.show_batting is True
+        # Sections are always visible now (headers persist even
+        # collapsed) — only their detail content toggles.
         batting_widget = app.screen.query_one("#batting-section")
-        print("=== After 'b' — batting section visible ===", batting_widget.display)
         assert batting_widget.display is True
 
         await pilot.press("left")

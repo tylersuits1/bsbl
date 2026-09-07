@@ -79,35 +79,40 @@ class MainScreen(VerticalScroll):
         *,
         last_updated: datetime | None,
         paused: bool,
+        page: int,
+        total_pages: int,
     ) -> None:
         today = format_full_date(datetime.now())
-        self.query_one("#masthead", Static).update(masthead(team.full_name, box.followed_team_record, today))
+        self.query_one("#masthead", Static).update(
+            masthead(team.full_name, box.followed_team_record, today, page=page, total_pages=total_pages)
+        )
 
         lines = [matchup_line(box), status_line(box), *detail_lines(box), "", refresh_status_line(last_updated, paused)]
         self.query_one("#summary", Static).update(Group(*lines))
 
         self.query_one("#innings", Static).update(inning_table(box))
 
+        # Batting/Stats headers are always shown — even collapsed — so the
+        # page makes clear these sections exist above the headlines,
+        # rather than only appearing once toggled on.
         batting_widget = self.query_one("#batting-section", Static)
         if self.show_batting:
-            batting_widget.update(Group("[bold]BATTING ORDER[/bold] [dim](-b to hide)[/dim]", "", batting_order_columns(box)))
-            batting_widget.display = True
+            batting_widget.update(Group("[bold]BATTING (-b)[/bold]", "", batting_order_columns(box)))
         else:
-            batting_widget.display = False
+            batting_widget.update("[bold]BATTING (+b)[/bold]")
 
         stats_widget = self.query_one("#stats-section", Static)
         if self.show_stats:
             if stats:
                 stats_widget.update(Group(
-                    "[bold]PLAYER STATS[/bold] [dim](-s to hide)[/dim]", "",
+                    "[bold]STATS (-s)[/bold]", "",
                     player_stats_table(stats, pitchers=False), "",
                     player_stats_table(stats, pitchers=True),
                 ))
             else:
-                stats_widget.update("[bold]PLAYER STATS[/bold] [dim](-s to hide)[/dim]\n\n[italic]No stats available.[/italic]")
-            stats_widget.display = True
+                stats_widget.update("[bold]STATS (-s)[/bold]\n\n[italic]No stats available.[/italic]")
         else:
-            stats_widget.display = False
+            stats_widget.update("[bold]STATS (+s)[/bold]")
 
         headline_list = self.query_one("#headlines-list", ListView)
         headline_list.clear()
@@ -211,7 +216,11 @@ class SportsPagesApp(App):
         relevant = headlines_for_team(merged, team_city=team.city, team_name=team.name)
 
         self.last_updated = datetime.now().astimezone()
-        self._body.render_team(team, box, relevant, stats, last_updated=self.last_updated, paused=self.live_paused)
+        self._body.render_team(
+            team, box, relevant, stats,
+            last_updated=self.last_updated, paused=self.live_paused,
+            page=self.current_index + 1, total_pages=len(self.teams),
+        )
         if box.status.value == "FINAL" and self._live_timer:
             self._live_timer.pause()
 
@@ -240,9 +249,11 @@ class SportsPagesApp(App):
             self.load_current_team()
 
     def _update_hints(self) -> None:
+        # Keeps only the hotkeys someone reaches for constantly. Theme (d)
+        # and Pause Live (p) still work — they're just listed in the '?'
+        # help screen instead of taking up space here every time.
         stats_sign = "-" if (self._body and self._body.show_stats) else "+"
         batting_sign = "-" if (self._body and self._body.show_batting) else "+"
-        live_label = "Resume Live" if self.live_paused else "Pause Live"
         parts = [
             ("←/→", "Teams"),
             ("↑/↓", "Headlines"),
@@ -251,8 +262,6 @@ class SportsPagesApp(App):
             ("enter", "Open"),
             ("r", "Refresh"),
             ("a", "Follow"),
-            ("p", live_label),
-            ("d", "Theme"),
             ("?", "Help"),
             ("q", "Quit"),
         ]
