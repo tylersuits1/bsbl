@@ -1,8 +1,9 @@
 """Team picker — MLB (league > division) or NCAAF (conference), with
-search scoped to whichever sport tab is active. F2 switches sport.
-Reached on first launch (no favorites yet) or via the 'a' hotkey.
-Groups start collapsed so browsing isn't one long scroll; Escape asks
-for a y/n confirmation before handing control back to the app.
+search scoped to whichever sport tab is active. 'b' jumps to baseball
+(MLB), 'f' to football (NCAAF). Reached on first launch (no favorites
+yet) or via the 'a' hotkey. Groups start collapsed so browsing isn't
+one long scroll; Escape asks for a y/n confirmation before handing
+control back to the app.
 """
 
 from __future__ import annotations
@@ -22,14 +23,14 @@ _MLB_DIVISIONS = ("East", "Central", "West")
 class TeamPickerScreen(Screen):
     BINDINGS = [
         Binding("escape", "request_exit", "Back"),
-        Binding("f2", "toggle_sport", "Switch Sport"),
+        Binding("b", "show_baseball", "Baseball"),
+        Binding("f", "show_football", "Football"),
         Binding("y", "confirm_yes", "Confirm"),
         Binding("n", "confirm_no", "Cancel"),
-        # Shadow the main app's global hotkeys so they don't leak into
-        # this screen's footer, or silently mutate the hidden page
-        # behind it (e.g. pressing 's' here toggling its stats panel).
+        # Shadow the main app's remaining global hotkeys so they don't
+        # leak into this screen's footer, or silently mutate the hidden
+        # page behind it (e.g. pressing 's' here toggling its stats panel).
         Binding("s", "noop", show=False),
-        Binding("b", "noop", show=False),
         Binding("r", "noop", show=False),
         Binding("a", "noop", show=False),
         Binding("d", "noop", show=False),
@@ -80,9 +81,8 @@ class TeamPickerScreen(Screen):
         self._refresh_list()
 
     def _update_title(self) -> None:
-        other = "NCAAF" if self._sport == "MLB" else "MLB"
         self.query_one("#picker-title", Static).update(
-            f"[bold]FOLLOW A TEAM — {self._sport}[/bold]  [dim](f2 for {other})[/dim]"
+            f"[bold]FOLLOW A TEAM — {self._sport}[/bold]  [dim](b baseball · f football)[/dim]"
         )
 
     def _refresh_list(self) -> None:
@@ -165,10 +165,16 @@ class TeamPickerScreen(Screen):
                 self.notify(f"You can follow up to {config.MAX_FAVORITES} teams", severity="warning")
             self._refresh_list()
 
-    def action_toggle_sport(self) -> None:
-        if self._confirming:
+    def action_show_baseball(self) -> None:
+        self._switch_sport("MLB")
+
+    def action_show_football(self) -> None:
+        self._switch_sport("NCAAF")
+
+    def _switch_sport(self, sport: str) -> None:
+        if self._confirming or self._sport == sport:
             return
-        self._sport = "NCAAF" if self._sport == "MLB" else "MLB"
+        self._sport = sport
         self._query = ""
         self.query_one("#search", Input).value = ""
         self._update_title()

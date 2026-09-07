@@ -22,7 +22,8 @@ _KEYS = [
 ]
 
 _PICKER_KEYS = [
-    ("f2", "Switch between MLB and NCAAF"),
+    ("b", "Browse baseball (MLB)"),
+    ("f", "Browse football (NCAAF)"),
     ("enter", "Expand/collapse a group, or follow/unfollow a team"),
     ("escape", "Ask to exit, listing your followed teams (y/n)"),
 ]

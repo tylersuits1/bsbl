@@ -86,12 +86,21 @@ async def main() -> None:
         assert isinstance(picker, TeamPickerScreen)
         assert picker._sport == "MLB"
 
-        await pilot.press("f2")
+        # 'f'/'b' are screen-level hotkeys, so (like Enter) they need the
+        # team list focused rather than the search box — the search box
+        # has to accept every letter as literal query text, since plenty
+        # of team names start with f or b.
+        team_list = picker.query_one("#team-list", ListView)
+        team_list.focus()
+        await pilot.pause(0.1)
+
+        await pilot.press("f")
         await pilot.pause(0.2)
-        print("=== Picker sport after f2 ===", picker._sport)
+        print("=== Picker sport after 'f' ===", picker._sport)
         assert picker._sport == "NCAAF"
-        await pilot.press("f2")
+        await pilot.press("b")
         await pilot.pause(0.2)
+        print("=== Picker sport after 'b' ===", picker._sport)
         assert picker._sport == "MLB"
 
         search = picker.query_one("#search", Input)
