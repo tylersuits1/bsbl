@@ -1,5 +1,6 @@
 Screen {
     align: center top;
+    scrollbar-size-vertical: 1;
 }
 
 #masthead {
@@ -46,11 +47,13 @@ Screen {
 }
 
 #headlines-list > ListItem.-highlight {
-    background: $accent 30%;
+    background: transparent;
+    color: $accent;
 }
 
 #body-scroll {
     height: 1fr;
+    scrollbar-size-vertical: 1;
 }
 
 #hint-bar {
@@ -82,6 +85,7 @@ Screen {
 
 #picker-body {
     height: 1fr;
+    scrollbar-size-vertical: 1;
 }
 
 #confirm-box {
