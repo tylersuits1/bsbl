@@ -12,6 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .date_format import format_clock_time, format_short_datetime, ordinal_inning
+from .fantasy_api import FantasyPlayerStats
 from .models import BoxScore, GameStatus, PlayerStat
 from .period_models import GameLeader, PeriodBoxScore, StandingEntry
 
@@ -263,6 +264,36 @@ def leaders_group(
     table.add_column()
     table.add_row(block(away_label, away_leaders), block(home_label, home_leaders))
     return table
+
+
+def fantasy_table(rows: list[tuple[dict, FantasyPlayerStats]]) -> Group:
+    table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False, expand=True)
+    table.add_column("PLAYER", ratio=3)
+    table.add_column("POS", justify="center", ratio=1)
+    table.add_column("TEAM", justify="center", ratio=1)
+    table.add_column("AVG PTS", justify="center", ratio=1)
+    table.add_column("PROJ*", justify="center", ratio=1)
+    table.add_column("EFF", justify="center", ratio=1)
+    for player, stats in rows:
+        if stats.completion_pct is not None:
+            eff = f"{stats.completion_pct:.1f}% CMP"
+        elif stats.points_per_carry is not None:
+            eff = f"{stats.points_per_carry:.2f} pt/car"
+        else:
+            eff = "—"
+        no_games = stats.games_played == 0
+        table.add_row(
+            player.get("name", "?"),
+            player.get("position", ""),
+            player.get("team_abbr", ""),
+            "—" if no_games else f"{stats.fantasy_points_per_game:.1f}",
+            "—" if no_games else f"{stats.projected_points:.1f}",
+            eff,
+        )
+    season_labels = {s.season_label for _, s in rows if s.season_label}
+    season_note = f" ({', '.join(sorted(season_labels))} season)" if season_labels else ""
+    footnote = Text(f"* PROJ is a season-average estimate{season_note} — not an official ESPN Fantasy projection.", style="dim italic")
+    return Group(table, "", footnote)
 
 
 def masthead(team_name: str, record: str, today: str, *, page: int, total_pages: int) -> Group:

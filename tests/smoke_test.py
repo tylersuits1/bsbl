@@ -20,6 +20,7 @@ async def main() -> None:
     config.save_favorites([
         ("MLB", "ATL"), ("MLB", "MIL"), ("NCAAF", "UGA"), ("NFL", "SF"), ("NBA", "LAL"),
     ])
+    config.save_fantasy_players([])  # isolate from fantasy_smoke_test.py's state
 
     app = SportsPagesApp()
     async with app.run_test(size=(100, 55)) as pilot:

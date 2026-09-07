@@ -1,7 +1,8 @@
 # sportspages-tui
 
 A newspaper-styled terminal UI for following MLB, NCAAF, NFL, and NBA
-games — the same spirit as the
+games — plus a lightweight fantasy-football player tracker — the same
+spirit as the
 [the-sports-pages](https://github.com/tylersuits1/the-sports-pages)
 Flutter app, but for the terminal, in the tradition of tools like
 Newsboat: launch it, swipe left/right between your teams, scroll up/down
@@ -9,8 +10,8 @@ through the news, single-letter hotkeys for everything else.
 
 Built with [Textual](https://textual.textualize.io/), pulling live data
 from the free, keyless MLB Stats API (`statsapi.mlb.com`) and ESPN's
-public site/news/odds feeds for all four sports — no API key required,
-no account, nothing to sign up for.
+public site/news/search/odds feeds — no API key required, no account,
+nothing to sign up for.
 
 ## Status
 
@@ -18,6 +19,15 @@ MLB, NCAAF, NFL, and NBA are all supported. MLB has its own box-score
 shape (innings, batting order, season player stats); the other three
 share one "period sport" shape (quarters, standings, per-game leaders)
 since their ESPN feeds are structurally identical.
+
+There's also a Fantasy page: search and track individual NFL players
+(press `p` in the team picker) and see them all on one aggregate page —
+season averages, a naive next-game point estimate, and a headline per
+player. This is **not** tied to a real ESPN Fantasy league (that API
+needs a league id and, for private leagues, browser auth cookies we
+don't have) — "PROJ" is our own season-average estimate, not ESPN's own
+projection engine, and scoring is a standard non-PPR formula computed
+from public season stats rather than your actual league's settings.
 
 ## Install
 
@@ -59,9 +69,11 @@ Live scores auto-refresh every 20 seconds while a game is in progress,
 same cadence as the Flutter app, and stop once the game goes final.
 
 In the team picker (`a`): `b`/`c`/`f`/`n` jump straight to baseball,
-college football, (NFL) football, or basketball; groups start collapsed
-and `enter` expands one; `escape` asks you to confirm (y/n) before
-exiting, listing your followed teams.
+college football, (NFL) football, or basketball, and `p` switches to a
+live NFL player search for the Fantasy page; groups start collapsed and
+`enter` expands one (or follows/unfollows a team or player); `escape`
+asks you to confirm (y/n) before exiting, listing everything you're
+following.
 
 ## Project layout
 
@@ -77,10 +89,11 @@ sportspages_tui/
 ├── ncaaf_api.py / ncaaf_teams.py   # NCAAF-specific bits: AP rankings, conferences
 ├── nfl_api.py   / nfl_teams.py     # NFL-specific bits: conferences/divisions
 ├── nba_api.py   / nba_teams.py     # NBA-specific bits: conferences/divisions, PTS/REB/AST leaders
-├── config.py               # favorites persistence (~/.config/sportspages-tui/)
+├── fantasy_api.py          # ESPN player search + per-player season stats -> our own fantasy scoring
+├── config.py               # favorites + fantasy-player persistence (~/.config/sportspages-tui/)
 ├── date_format.py          # short (body) vs full (masthead) date formatting
 ├── screens/
-│   ├── team_picker.py      # 4-sport picker: league/conference > division, with search
+│   ├── team_picker.py      # 4-sport + fantasy-player picker, with search
 │   └── help.py             # keybinding reference overlay
 └── app.tcss                 # styling
 ```
@@ -95,6 +108,7 @@ data actually arriving:
 
 ```bash
 python tests/smoke_test.py
+python tests/fantasy_smoke_test.py   # search/follow/render for a real NFL player
 ```
 
 `tests/screenshot_test.py` dumps an SVG render of the live app to
