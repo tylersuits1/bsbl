@@ -7,13 +7,12 @@ from __future__ import annotations
 
 from rich.align import Align
 from rich.console import Group
+from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from .date_format import format_short_datetime, ordinal_inning
-from .models import BoxScore, GameStatus, Headline, PlayerStat
-
-RULE_CHAR = "═"
+from .date_format import format_clock_time, format_short_datetime, ordinal_inning
+from .models import BoxScore, GameStatus, PlayerStat
 
 _STATUS_STYLE = {
     GameStatus.LIVE: "bold red",
@@ -158,22 +157,28 @@ def player_stats_table(stats: list[PlayerStat], *, pitchers: bool) -> Table:
     return table
 
 
-def headline_list(headlines: list[Headline], limit: int = 5) -> Group:
-    if not headlines:
-        return Group(Text("No headlines available.", style="italic dim"))
-    blocks = []
-    for i, h in enumerate(headlines[:limit], start=1):
-        blocks.append(Text(f"{i}. {h.title}", style="bold"))
-        blocks.append(Text(f"   {h.byline} | {h.time_ago}", style="italic dim"))
-        blocks.append(Text(""))
-    return Group(*blocks)
+def refresh_status_line(last_updated, paused: bool) -> Text:
+    """'⏸ LIVE UPDATES PAUSED  ·  Last updated 3:45:12 PM' — always shows
+    when data was last fetched; prepends a paused indicator whenever
+    live auto-refresh is off, so it's clear stale data isn't about to
+    silently update.
+    """
+    line = Text()
+    if paused:
+        line.append("⏸ PAUSED", style="bold yellow")
+        line.append("  ·  ", style="dim")
+    if last_updated is not None:
+        line.append(f"Last updated {format_clock_time(last_updated)}", style="dim italic")
+    else:
+        line.append("Not yet updated", style="dim italic")
+    return line
 
 
 def masthead(team_name: str, record: str, today: str) -> Group:
     date_line = Align.center(Text(f"THE SPORTS PAGES · {today}", style="dim"))
     name_line = Align.center(Text(team_name.upper(), style="bold"))
     record_line = Align.center(Text(record, style="dim")) if record else None
-    rule = Text(RULE_CHAR * 60, style="bold")
+    rule = Rule(style="bold", characters="═")
     parts = [date_line, name_line]
     if record_line:
         parts.append(record_line)

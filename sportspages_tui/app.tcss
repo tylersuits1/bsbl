@@ -14,11 +14,6 @@ Screen {
     padding: 0 2 1 2;
 }
 
-#section-toggle-hint {
-    padding: 0 2;
-    color: $text-muted;
-}
-
 .section {
     padding: 0 2 1 2;
     border-top: heavy $foreground 30%;
@@ -29,13 +24,41 @@ Screen {
     padding-bottom: 1;
 }
 
-#headlines-box {
+#headlines-section {
     padding: 0 2 1 2;
     border-top: heavy $foreground 30%;
+    height: auto;
+}
+
+#headlines-title {
+    padding-bottom: 1;
+}
+
+#headlines-list {
+    height: auto;
+    max-height: 20;
+    background: transparent;
+}
+
+#headlines-list > ListItem {
+    background: transparent;
+    padding: 0 0 1 0;
+}
+
+#headlines-list > ListItem.-highlight {
+    background: $accent 30%;
 }
 
 #body-scroll {
     height: 1fr;
+}
+
+#hint-bar {
+    dock: bottom;
+    height: 1;
+    padding: 0 1;
+    background: $panel;
+    width: 100%;
 }
 
 #picker-title {

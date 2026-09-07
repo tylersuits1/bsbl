@@ -6,32 +6,45 @@ news, single-letter hotkeys for everything else.
 
 from __future__ import annotations
 
+import webbrowser
 from datetime import datetime
 
+import httpx
 from rich.console import Group
-from textual import work
+from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
-from textual.widgets import Footer, Static
+from textual.containers import Vertical, VerticalScroll
+from textual.widgets import ListItem, ListView, Static
 
 from . import config, mlb_teams
 from .date_format import format_full_date
 from .mlb_api import MlbNewsService, MlbStatsError, MlbStatsService, headlines_for_team
 from .models import BoxScore, Headline, PlayerStat
+from .news_sources import fetch_bing_news, fetch_google_news, merge_headlines
 from .rendering import (
     batting_order_columns,
     detail_lines,
-    headline_list,
     inning_table,
     masthead,
     matchup_line,
     player_stats_table,
+    refresh_status_line,
     status_line,
 )
 from .screens.help import HelpScreen
 from .screens.team_picker import TeamPickerScreen
 
 LIVE_REFRESH_SECONDS = 20
+
+
+class HeadlineItem(ListItem):
+    def __init__(self, headline: Headline) -> None:
+        body = Group(
+            f"[bold]{headline.title}[/bold]",
+            f"[italic dim]{headline.byline} | {headline.time_ago}[/italic dim]",
+        )
+        super().__init__(Static(body))
+        self.url = headline.url
 
 
 class MainScreen(VerticalScroll):
@@ -53,20 +66,31 @@ class MainScreen(VerticalScroll):
         yield Static(id="innings")
         yield Static(id="batting-section", classes="section")
         yield Static(id="stats-section", classes="section")
-        yield Static(id="headlines-box")
+        with Vertical(id="headlines-section", classes="section"):
+            yield Static("[bold]HEADLINES[/bold]", id="headlines-title")
+            yield ListView(id="headlines-list")
 
-    def render_team(self, team: mlb_teams.TeamInfo, box: BoxScore, headlines: list[Headline], stats: list[PlayerStat]) -> None:
+    def render_team(
+        self,
+        team: mlb_teams.TeamInfo,
+        box: BoxScore,
+        headlines: list[Headline],
+        stats: list[PlayerStat],
+        *,
+        last_updated: datetime | None,
+        paused: bool,
+    ) -> None:
         today = format_full_date(datetime.now())
         self.query_one("#masthead", Static).update(masthead(team.full_name, box.followed_team_record, today))
 
-        lines = [matchup_line(box), status_line(box), *detail_lines(box)]
+        lines = [matchup_line(box), status_line(box), *detail_lines(box), "", refresh_status_line(last_updated, paused)]
         self.query_one("#summary", Static).update(Group(*lines))
 
         self.query_one("#innings", Static).update(inning_table(box))
 
         batting_widget = self.query_one("#batting-section", Static)
         if self.show_batting:
-            batting_widget.update(Group("[bold]BATTING ORDER[/bold] [dim](b to hide)[/dim]", "", batting_order_columns(box)))
+            batting_widget.update(Group("[bold]BATTING ORDER[/bold] [dim](-b to hide)[/dim]", "", batting_order_columns(box)))
             batting_widget.display = True
         else:
             batting_widget.display = False
@@ -75,19 +99,24 @@ class MainScreen(VerticalScroll):
         if self.show_stats:
             if stats:
                 stats_widget.update(Group(
-                    "[bold]PLAYER STATS[/bold] [dim](s to hide)[/dim]", "",
+                    "[bold]PLAYER STATS[/bold] [dim](-s to hide)[/dim]", "",
                     player_stats_table(stats, pitchers=False), "",
                     player_stats_table(stats, pitchers=True),
                 ))
             else:
-                stats_widget.update("[bold]PLAYER STATS[/bold] [dim](s to hide)[/dim]\n\n[italic]No stats available.[/italic]")
+                stats_widget.update("[bold]PLAYER STATS[/bold] [dim](-s to hide)[/dim]\n\n[italic]No stats available.[/italic]")
             stats_widget.display = True
         else:
             stats_widget.display = False
 
-        self.query_one("#headlines-box", Static).update(
-            Group("[bold]HEADLINES[/bold]", "", headline_list(headlines))
-        )
+        headline_list = self.query_one("#headlines-list", ListView)
+        headline_list.clear()
+        if headlines:
+            for h in headlines[:5]:
+                headline_list.append(HeadlineItem(h))
+        else:
+            headline_list.append(ListItem(Static("[italic dim]No headlines available.[/italic dim]"), disabled=True))
+        headline_list.focus()
 
 
 class SportsPagesApp(App):
@@ -111,24 +140,28 @@ class SportsPagesApp(App):
 
     def __init__(self) -> None:
         super().__init__()
-        self.stats_service = MlbStatsService()
-        self.news_service = MlbNewsService()
+        self._http = httpx.AsyncClient(timeout=12.0)
+        self.stats_service = MlbStatsService(self._http)
+        self.news_service = MlbNewsService(self._http)
         self.current_index = 0
         self.teams: list[mlb_teams.TeamInfo] = []
-        self.headlines: list[Headline] = []
+        self.league_headlines: list[Headline] = []
+        self.last_updated: datetime | None = None
         self.live_paused = False
         self._live_timer = None
         self._body: MainScreen | None = None
+        self.theme = "ansi-dark"
 
     def compose(self) -> ComposeResult:
         self._body = MainScreen()
         yield self._body
-        yield Footer()
+        yield Static(id="hint-bar")
 
     async def on_mount(self) -> None:
+        self._update_hints()
         self._load_teams()
         if not self.teams:
-            await self._open_picker(first_run=True)
+            await self._open_picker()
         else:
             self._start_live_timer()
             self.load_current_team()
@@ -140,7 +173,7 @@ class SportsPagesApp(App):
         if self.current_index >= len(self.teams):
             self.current_index = max(0, len(self.teams) - 1)
 
-    async def _open_picker(self, first_run: bool = False) -> None:
+    async def _open_picker(self) -> None:
         await self.push_screen(TeamPickerScreen(), callback=lambda _: self._on_picker_closed())
 
     def _on_picker_closed(self) -> None:
@@ -172,22 +205,65 @@ class SportsPagesApp(App):
         except MlbStatsError as e:
             self.notify(f"Could not load {team.full_name}: {e}", severity="error")
             return
-        relevant = headlines_for_team(self.headlines, team_city=team.city, team_name=team.name)
-        self._body.render_team(team, box, relevant, stats)
+
+        web_headlines = await self._fetch_web_headlines(team)
+        merged = merge_headlines([self.league_headlines, web_headlines])
+        relevant = headlines_for_team(merged, team_city=team.city, team_name=team.name)
+
+        self.last_updated = datetime.now().astimezone()
+        self._body.render_team(team, box, relevant, stats, last_updated=self.last_updated, paused=self.live_paused)
         if box.status.value == "FINAL" and self._live_timer:
             self._live_timer.pause()
+
+    async def _fetch_web_headlines(self, team: mlb_teams.TeamInfo) -> list[Headline]:
+        """Google News + Bing News, scoped to this team, as extra sources
+        alongside ESPN's general MLB feed — without these, a team with no
+        stories in ESPN's top-12 general feed shows almost nothing.
+        """
+        query = f"{team.full_name} MLB"
+        try:
+            google, bing = await fetch_google_news(self._http, query), await fetch_bing_news(self._http, query)
+            return [*google, *bing]
+        except Exception:
+            return []
 
     @work(exclusive=True, group="headlines")
     async def _refresh_headlines(self) -> None:
         try:
-            self.headlines = await self.news_service.fetch_headlines()
+            self.league_headlines = await self.news_service.fetch_headlines()
         except MlbStatsError:
-            self.headlines = []
+            self.league_headlines = []
         self.load_current_team()
 
     def _auto_refresh(self) -> None:
         if not self.live_paused:
             self.load_current_team()
+
+    def _update_hints(self) -> None:
+        stats_sign = "-" if (self._body and self._body.show_stats) else "+"
+        batting_sign = "-" if (self._body and self._body.show_batting) else "+"
+        live_label = "Resume Live" if self.live_paused else "Pause Live"
+        parts = [
+            ("←/→", "Teams"),
+            ("↑/↓", "Headlines"),
+            (f"{stats_sign}s", "Stats"),
+            (f"{batting_sign}b", "Batting"),
+            ("enter", "Open"),
+            ("r", "Refresh"),
+            ("a", "Follow"),
+            ("p", live_label),
+            ("d", "Theme"),
+            ("?", "Help"),
+            ("q", "Quit"),
+        ]
+        text = "   ".join(f"[reverse] {key} [/reverse] {label}" for key, label in parts)
+        self.query_one("#hint-bar", Static).update(text)
+
+    @on(ListView.Selected, "#headlines-list")
+    def on_headline_selected(self, event: ListView.Selected) -> None:
+        url = getattr(event.item, "url", None)
+        if url:
+            webbrowser.open(url)
 
     # -- actions -------------------------------------------------------
 
@@ -215,12 +291,14 @@ class SportsPagesApp(App):
         if not self._body:
             return
         self._body.show_stats = not self._body.show_stats
+        self._update_hints()
         self.load_current_team()
 
     def action_toggle_batting(self) -> None:
         if not self._body:
             return
         self._body.show_batting = not self._body.show_batting
+        self._update_hints()
         self.load_current_team()
 
     def action_refresh_now(self) -> None:
@@ -231,14 +309,14 @@ class SportsPagesApp(App):
 
     def action_toggle_live(self) -> None:
         self.live_paused = not self.live_paused
-        self.notify("Live refresh paused" if self.live_paused else "Live refresh resumed")
+        self._update_hints()
+        self.load_current_team()
 
     def action_toggle_dark(self) -> None:
-        self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
+        self.theme = "ansi-light" if self.theme == "ansi-dark" else "ansi-dark"
 
     async def action_show_help(self) -> None:
         await self.push_screen(HelpScreen())
 
     async def on_unmount(self) -> None:
-        await self.stats_service.aclose()
-        await self.news_service.aclose()
+        await self._http.aclose()
