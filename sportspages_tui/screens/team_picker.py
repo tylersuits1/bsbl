@@ -1,9 +1,10 @@
-"""Team picker — MLB (league > division) or NCAAF (conference), with
-search scoped to whichever sport tab is active. 'b' jumps to baseball
-(MLB), 'f' to football (NCAAF). Reached on first launch (no favorites
-yet) or via the 'a' hotkey. Groups start collapsed so browsing isn't
-one long scroll; Escape asks for a y/n confirmation before handing
-control back to the app.
+"""Team picker — one of four sports (MLB/NCAAF/NFL/NBA), browsed by
+league/conference > division, with search scoped to whichever sport tab
+is active. 'b' jumps to baseball (MLB), 'c' to college football
+(NCAAF), 'f' to (NFL) football, 'n' to basketball (NBA). Reached on
+first launch (no favorites yet) or via the 'a' hotkey. Groups start
+collapsed so browsing isn't one long scroll; Escape asks for a y/n
+confirmation before handing control back to the app.
 """
 
 from __future__ import annotations
@@ -15,18 +16,28 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Input, ListItem, ListView, Static
 
-from .. import config, mlb_teams, ncaaf_teams
+from .. import config, mlb_teams, nba_teams, ncaaf_teams, nfl_teams
 
 _MLB_DIVISIONS = ("East", "Central", "West")
+
+_TEAM_MODULES = {
+    "MLB": mlb_teams,
+    "NCAAF": ncaaf_teams,
+    "NFL": nfl_teams,
+    "NBA": nba_teams,
+}
+
+_SPORT_LABELS = {"MLB": "MLB", "NCAAF": "NCAAF", "NFL": "NFL", "NBA": "NBA"}
 
 
 class TeamPickerScreen(Screen):
     BINDINGS = [
         Binding("escape", "request_exit", "Back"),
         Binding("b", "show_baseball", "Baseball"),
+        Binding("c", "show_college_football", "College FB"),
         Binding("f", "show_football", "Football"),
         Binding("y", "confirm_yes", "Confirm"),
-        Binding("n", "confirm_no", "Cancel"),
+        Binding("n", "confirm_no", "Basketball / Cancel"),
         # Shadow the main app's remaining global hotkeys so they don't
         # leak into this screen's footer, or silently mutate the hidden
         # page behind it (e.g. pressing 's' here toggling its stats panel).
@@ -50,8 +61,7 @@ class TeamPickerScreen(Screen):
         # Groups start collapsed — makes the initial browse view a short
         # list of headers instead of every team at once.
         self._collapsed: dict[str, set[str]] = {
-            "MLB": {f"{league}/{division}" for league in mlb_teams.LEAGUES for division in _MLB_DIVISIONS},
-            "NCAAF": set(ncaaf_teams.CONFERENCES),
+            sport: {key for key, _, _ in self._groups_for_sport(sport)} for sport in _TEAM_MODULES
         }
 
     def compose(self) -> ComposeResult:
@@ -83,8 +93,47 @@ class TeamPickerScreen(Screen):
 
     def _update_title(self) -> None:
         self.query_one("#picker-title", Static).update(
-            f"[bold]FOLLOW A TEAM — {self._sport}[/bold]  [dim](b baseball · f football)[/dim]"
+            f"[bold]FOLLOW A TEAM — {_SPORT_LABELS[self._sport]}[/bold]  "
+            "[dim](b baseball · c college · f NFL · n NBA)[/dim]"
         )
+
+    def _groups_for_sport(self, sport: str) -> list[tuple[str, str, list]]:
+        """(group key, display label, teams) for every non-empty
+        league/conference+division group in the given sport — used both
+        to render the browse list and to seed the collapsed-by-default
+        state per sport up front.
+        """
+        if sport == "MLB":
+            groups = []
+            for league in mlb_teams.LEAGUES:
+                for division in _MLB_DIVISIONS:
+                    teams = mlb_teams.teams_in_division(league, division)
+                    if teams:
+                        groups.append((f"{league}/{division}", f"{league} — {division}", teams))
+            return groups
+        if sport == "NCAAF":
+            return [
+                (conf, conf, teams)
+                for conf in ncaaf_teams.CONFERENCES
+                if (teams := ncaaf_teams.teams_in_conference(conf))
+            ]
+        if sport == "NFL":
+            groups = []
+            for conf in nfl_teams.CONFERENCES:
+                for division in nfl_teams.DIVISIONS:
+                    teams = nfl_teams.teams_in_division(conf, division)
+                    if teams:
+                        groups.append((f"{conf}/{division}", f"{conf} {division}", teams))
+            return groups
+        if sport == "NBA":
+            groups = []
+            for conf in nba_teams.CONFERENCES:
+                for division in nba_teams.DIVISIONS[conf]:
+                    teams = nba_teams.teams_in_division(conf, division)
+                    if teams:
+                        groups.append((f"{conf}/{division}", f"{conf} {division}", teams))
+            return groups
+        return []
 
     def _refresh_list(self) -> None:
         list_view = self.query_one("#team-list", ListView)
@@ -98,20 +147,8 @@ class TeamPickerScreen(Screen):
                 list_view.index = 0
             return
 
-        if self._sport == "MLB":
-            for league in mlb_teams.LEAGUES:
-                for division in _MLB_DIVISIONS:
-                    teams = mlb_teams.teams_in_division(league, division)
-                    if not teams:
-                        continue
-                    key = f"{league}/{division}"
-                    self._append_group(list_view, "MLB", key, f"{league} — {division}", teams, favorites)
-        else:
-            for conference in ncaaf_teams.CONFERENCES:
-                teams = ncaaf_teams.teams_in_conference(conference)
-                if not teams:
-                    continue
-                self._append_group(list_view, "NCAAF", conference, conference, teams, favorites)
+        for key, label, teams in self._groups_for_sport(self._sport):
+            self._append_group(list_view, self._sport, key, label, teams, favorites)
 
         # ListView needs a highlighted item before Enter/click do
         # anything — without this, a user opening the picker and
@@ -133,8 +170,10 @@ class TeamPickerScreen(Screen):
                 list_view.append(self._team_item(team, favorites, indent=True))
 
     def _search_matches(self) -> list:
-        pool = mlb_teams.TEAMS if self._sport == "MLB" else ncaaf_teams.TEAMS
-        matches = [t for t in pool if self._query in t.name.lower() or self._query in t.city.lower()]
+        matches = [
+            t for t in _TEAM_MODULES[self._sport].TEAMS
+            if self._query in t.name.lower() or self._query in t.city.lower()
+        ]
         matches.sort(key=lambda t: t.name)
         return matches
 
@@ -169,8 +208,11 @@ class TeamPickerScreen(Screen):
     def action_show_baseball(self) -> None:
         self._switch_sport("MLB")
 
-    def action_show_football(self) -> None:
+    def action_show_college_football(self) -> None:
         self._switch_sport("NCAAF")
+
+    def action_show_football(self) -> None:
+        self._switch_sport("NFL")
 
     def _switch_sport(self, sport: str) -> None:
         if self._confirming or self._sport == sport:
@@ -192,7 +234,8 @@ class TeamPickerScreen(Screen):
         if entries:
             names = []
             for sport, abbr in entries:
-                team = mlb_teams.team_by_abbreviation(abbr) if sport == "MLB" else ncaaf_teams.team_by_abbreviation(abbr)
+                module = _TEAM_MODULES.get(sport)
+                team = module.team_by_abbreviation(abbr) if module else None
                 names.append(team.full_name if team else f"{sport}:{abbr}")
             listing = "\n".join(f"  • {n}" for n in names)
         else:
@@ -213,7 +256,11 @@ class TeamPickerScreen(Screen):
         self.dismiss()
 
     def action_confirm_no(self) -> None:
+        # 'n' is dual-purpose: switch to basketball when browsing, but
+        # cancel the exit-confirmation prompt when it's showing — the
+        # two states never overlap, so one key does both jobs.
         if not self._confirming:
+            self._switch_sport("NBA")
             return
         self._confirming = False
         self.query_one("#confirm-box", Static).display = False

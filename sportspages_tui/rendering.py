@@ -13,7 +13,7 @@ from rich.text import Text
 
 from .date_format import format_clock_time, format_short_datetime, ordinal_inning
 from .models import BoxScore, GameStatus, PlayerStat
-from .ncaaf_models import NcaafBoxScore, NcaafGameLeader, NcaafStandingEntry
+from .period_models import GameLeader, PeriodBoxScore, StandingEntry
 
 _STATUS_STYLE = {
     GameStatus.LIVE: "bold red",
@@ -175,16 +175,16 @@ def refresh_status_line(last_updated, paused: bool) -> Text:
     return line
 
 
-def ncaaf_matchup_line(box: NcaafBoxScore) -> Text:
+def period_matchup_line(box: PeriodBoxScore) -> Text:
     away, home = box.away, box.home
-    away_label = f"#{away.ap_rank} {away.name}" if away.ap_rank else away.name
-    home_label = f"#{home.ap_rank} {home.name}" if home.ap_rank else home.name
-    if box.status == GameStatus.SCHEDULED and not box.away_quarters and not box.home_quarters:
+    away_label = f"#{away.rank} {away.name}" if away.rank else away.name
+    home_label = f"#{home.rank} {home.name}" if home.rank else home.name
+    if box.status == GameStatus.SCHEDULED and not box.away_periods and not box.home_periods:
         return Text(f"{away_label} @ {home_label}", style="bold")
     return Text(f"{away_label} {away.score} | {home_label} {home.score}", style="bold")
 
 
-def ncaaf_status_line(box: NcaafBoxScore) -> Text:
+def period_status_line(box: PeriodBoxScore) -> Text:
     line = Text()
     line.append_text(status_text(box.status))
     detail = box.status_detail.strip()
@@ -193,7 +193,7 @@ def ncaaf_status_line(box: NcaafBoxScore) -> Text:
     return line
 
 
-def ncaaf_detail_lines(box: NcaafBoxScore) -> list[str]:
+def period_detail_lines(box: PeriodBoxScore) -> list[str]:
     lines = []
     parts = []
     if box.venue:
@@ -214,8 +214,8 @@ def ncaaf_detail_lines(box: NcaafBoxScore) -> list[str]:
     return lines
 
 
-def quarter_table(box: NcaafBoxScore) -> Table:
-    q_count = max(len(box.away_quarters), len(box.home_quarters), 4)
+def quarter_table(box: PeriodBoxScore) -> Table:
+    q_count = max(len(box.away_periods), len(box.home_periods), 4)
     table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False)
     table.add_column("", width=5)
     for i in range(1, q_count + 1):
@@ -223,33 +223,33 @@ def quarter_table(box: NcaafBoxScore) -> Table:
         table.add_column(label, justify="center", width=4)
     table.add_column("T", justify="center", width=4, style="bold")
 
-    def row(label: str, quarters: list, total: int) -> list[str]:
+    def row(label: str, periods: list, total: int) -> list[str]:
         cells = [label]
         for i in range(q_count):
-            value = quarters[i] if i < len(quarters) else None
+            value = periods[i] if i < len(periods) else None
             cells.append("–" if value in (None, "") else str(value))
         cells.append(str(total))
         return cells
 
-    table.add_row(*row(box.away.abbreviation or "AWAY", box.away_quarters, box.away.score))
-    table.add_row(*row(box.home.abbreviation or "HOME", box.home_quarters, box.home.score))
+    table.add_row(*row(box.away.abbreviation or "AWAY", box.away_periods, box.away.score))
+    table.add_row(*row(box.home.abbreviation or "HOME", box.home_periods, box.home.score))
     return table
 
 
-def standings_table(entries: list[NcaafStandingEntry]) -> Table:
+def standings_table(entries: list[StandingEntry], *, secondary_label: str = "CONF") -> Table:
     table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False, expand=True)
     table.add_column("TEAM", ratio=3)
-    table.add_column("CONF", justify="center", ratio=1)
+    table.add_column(secondary_label, justify="center", ratio=1)
     table.add_column("OVERALL", justify="center", ratio=1)
     for e in entries:
-        table.add_row(e.team_name, e.conference_record, e.overall_record)
+        table.add_row(e.team_name, e.secondary_record, e.overall_record)
     return table
 
 
 def leaders_group(
-    away_leaders: list[NcaafGameLeader], home_leaders: list[NcaafGameLeader], away_label: str, home_label: str
+    away_leaders: list[GameLeader], home_leaders: list[GameLeader], away_label: str, home_label: str
 ) -> Table:
-    def block(label: str, leaders: list[NcaafGameLeader]) -> Group:
+    def block(label: str, leaders: list[GameLeader]) -> Group:
         lines = [Text(label, style="bold")]
         if not leaders:
             lines.append(Text("No leaders reported", style="italic dim"))

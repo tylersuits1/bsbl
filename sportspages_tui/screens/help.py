@@ -11,9 +11,9 @@ _KEYS = [
     ("← / →", "Switch between followed teams"),
     ("↑ / ↓", "Move through the headlines list"),
     ("enter", "Open the highlighted headline in your browser"),
-    ("s", "Toggle stats (MLB) / standings (NCAAF)"),
+    ("s", "Toggle stats (MLB) / standings (NCAAF, NFL, NBA)"),
     ("b", "Toggle batting order (MLB only)"),
-    ("l", "Toggle game leaders (NCAAF only)"),
+    ("l", "Toggle game leaders (NCAAF, NFL, NBA only)"),
     ("r", "Refresh now"),
     ("a", "Follow / unfollow teams — search or browse by division/conference"),
     ("p", "Pause / resume live auto-refresh"),
@@ -24,7 +24,9 @@ _KEYS = [
 
 _PICKER_KEYS = [
     ("b", "Browse baseball (MLB)"),
-    ("f", "Browse football (NCAAF)"),
+    ("c", "Browse college football (NCAAF)"),
+    ("f", "Browse football (NFL)"),
+    ("n", "Browse basketball (NBA)"),
     ("enter", "Expand/collapse a group, or follow/unfollow a team"),
     ("escape", "Ask to exit, listing your followed teams (y/n)"),
 ]

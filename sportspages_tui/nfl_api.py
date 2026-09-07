@@ -1,30 +1,30 @@
-"""Live NCAAF (FBS) data from ESPN's public college football API — no
-API key required. Thin sport-specific layer over espn_period_sport's
-shared parsing; adds the one thing unique to college ball: an AP Top 25
-rank per team.
+"""Live NFL data from ESPN's public football/nfl API — no API key
+required. Thin sport-specific layer over espn_period_sport's shared
+parsing; NFL has no AP-poll-style ranking, so team sides are built
+without a rank lookup.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 
 from . import espn_period_sport as common
-from . import ncaaf_teams
+from . import nfl_teams
 from .models import GameStatus, Headline
 from .period_models import PeriodBoxScore, PeriodTeamSide
 
-NCAAF_BASE = "https://site.api.espn.com/apis/site/v2/sports/football/college-football"
+NFL_BASE = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
 
 _LEADER_LABELS = {"passingYards": "QB", "rushingYards": "RB", "receivingYards": "WR"}
 
 
-class NcaafStatsError(common.PeriodStatsError):
+class NflStatsError(common.PeriodStatsError):
     pass
 
 
-class NcaafStatsService:
+class NflStatsService:
     def __init__(self, client: httpx.AsyncClient | None = None):
         self._client = client or httpx.AsyncClient(timeout=12.0)
         self._owns_client = client is None
@@ -33,20 +33,17 @@ class NcaafStatsService:
         if self._owns_client:
             await self._client.aclose()
 
-    async def fetch_game_for_team(self, team: ncaaf_teams.NcaafTeamInfo) -> PeriodBoxScore:
-        schedule = await common.get_json(self._client, f"{NCAAF_BASE}/teams/{team.espn_id}/schedule", NcaafStatsError)
+    async def fetch_game_for_team(self, team: nfl_teams.NflTeamInfo) -> PeriodBoxScore:
+        schedule = await common.get_json(self._client, f"{NFL_BASE}/teams/{team.espn_id}/schedule", NflStatsError)
         events = schedule.get("events") or []
         nearest = common.nearest_event(events)
         if nearest is None:
             return self._no_schedule(team)
 
-        rankings = await self._fetch_ap_rankings()
-        summary = await common.get_json(self._client, f"{NCAAF_BASE}/summary?event={nearest['id']}", NcaafStatsError)
-        return self._parse_summary(summary, followed_team=team, rankings=rankings, schedule_events=events)
+        summary = await common.get_json(self._client, f"{NFL_BASE}/summary?event={nearest['id']}", NflStatsError)
+        return self._parse_summary(summary, followed_team=team, schedule_events=events)
 
-    def _parse_summary(
-        self, data: dict, *, followed_team: ncaaf_teams.NcaafTeamInfo, rankings: dict[int, int], schedule_events: list[dict]
-    ) -> PeriodBoxScore:
+    def _parse_summary(self, data: dict, *, followed_team: nfl_teams.NflTeamInfo, schedule_events: list[dict]) -> PeriodBoxScore:
         header = data["header"]
         competition = header["competitions"][0]
         competitors = competition["competitors"]
@@ -57,8 +54,8 @@ class NcaafStatsService:
         status = common.map_status(status_type.get("name", ""))
         status_detail = status_type.get("shortDetail", "")
 
-        away = common.build_side(away_c, rank_lookup=rankings)
-        home = common.build_side(home_c, rank_lookup=rankings)
+        away = common.build_side(away_c)
+        home = common.build_side(home_c)
 
         venue, weather = common.parse_venue_weather(data.get("gameInfo") or {})
 
@@ -97,24 +94,7 @@ class NcaafStatsService:
             standings=standings, money_line=money_line,
         )
 
-    async def _fetch_ap_rankings(self) -> dict[int, int]:
-        try:
-            data = await common.get_json(self._client, f"{NCAAF_BASE}/rankings", NcaafStatsError)
-            rankings_list = data.get("rankings") or []
-            if not rankings_list:
-                return {}
-            ap_poll = next((r for r in rankings_list if r.get("type") == "ap"), rankings_list[0])
-            result = {}
-            for r in ap_poll.get("ranks") or []:
-                current = r.get("current")
-                team_id = common.parse_int((r.get("team") or {}).get("id"))
-                if current is not None and team_id is not None:
-                    result[team_id] = current
-            return result
-        except Exception:
-            return {}
-
-    def _no_schedule(self, team: ncaaf_teams.NcaafTeamInfo) -> PeriodBoxScore:
+    def _no_schedule(self, team: nfl_teams.NflTeamInfo) -> PeriodBoxScore:
         return PeriodBoxScore(
             away=PeriodTeamSide(city=team.city, name=team.name, abbreviation=team.abbreviation, score=0),
             home=PeriodTeamSide(city="", name="TBD", abbreviation="", score=0),
@@ -124,9 +104,9 @@ class NcaafStatsService:
         )
 
 
-class NcaafNewsService:
-    """College football headlines from ESPN's public (unofficial) news
-    endpoint — the same feed style already used for MLB.
+class NflNewsService:
+    """NFL headlines from ESPN's public (unofficial) news endpoint —
+    the same feed style already used for MLB/NCAAF.
     """
 
     def __init__(self, client: httpx.AsyncClient | None = None):
@@ -138,4 +118,4 @@ class NcaafNewsService:
             await self._client.aclose()
 
     async def fetch_headlines(self) -> list[Headline]:
-        return await common.fetch_espn_headlines(self._client, f"{NCAAF_BASE}/news?limit=12", NcaafStatsError)
+        return await common.fetch_espn_headlines(self._client, f"{NFL_BASE}/news?limit=12", NflStatsError)

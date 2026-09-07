@@ -1,7 +1,7 @@
 [project]
 name = "sportspages-tui"
 version = "0.1.0"
-description = "A newspaper-styled terminal UI for following MLB games, in the spirit of Newsboat."
+description = "A newspaper-styled terminal UI for following MLB, NCAAF, NFL, and NBA games, in the spirit of Newsboat."
 requires-python = ">=3.10"
 dependencies = [
     "textual>=8.0",

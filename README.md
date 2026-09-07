@@ -1,22 +1,23 @@
 # sportspages-tui
 
-A newspaper-styled terminal UI for following MLB games — the same spirit
-as the [the-sports-pages](https://github.com/tylersuits1/the-sports-pages)
+A newspaper-styled terminal UI for following MLB, NCAAF, NFL, and NBA
+games — the same spirit as the
+[the-sports-pages](https://github.com/tylersuits1/the-sports-pages)
 Flutter app, but for the terminal, in the tradition of tools like
 Newsboat: launch it, swipe left/right between your teams, scroll up/down
 through the news, single-letter hotkeys for everything else.
 
 Built with [Textual](https://textual.textualize.io/), pulling live data
 from the free, keyless MLB Stats API (`statsapi.mlb.com`) and ESPN's
-public news/odds feeds — no API key required, no account, nothing to
-sign up for.
+public site/news/odds feeds for all four sports — no API key required,
+no account, nothing to sign up for.
 
 ## Status
 
-v1, MLB only. NCAAF (college football) is a planned fast-follow once this
-shell is proven out — see the Flutter sibling app for the fuller feature
-set this is working toward (divisions/conferences, AP rankings, quarter
-scores, game leaders, reader-view headlines).
+MLB, NCAAF, NFL, and NBA are all supported. MLB has its own box-score
+shape (innings, batting order, season player stats); the other three
+share one "period sport" shape (quarters, standings, per-game leaders)
+since their ESPN feeds are structurally identical.
 
 ## Install
 
@@ -40,37 +41,48 @@ where favorites reset on restart.
 
 ## Keys
 
-| Key     | Action                              |
-|---------|--------------------------------------|
-| ← / →   | Switch between followed teams        |
-| ↑ / ↓   | Scroll headlines / page content      |
-| `s`     | Toggle player stats                  |
-| `b`     | Toggle batting order                 |
-| `r`     | Refresh now                          |
-| `a`     | Follow / unfollow teams              |
-| `p`     | Pause / resume live auto-refresh     |
-| `d`     | Toggle dark / light theme            |
-| `?`     | Help screen                          |
-| `q`     | Quit                                 |
+| Key     | Action                                          |
+|---------|--------------------------------------------------|
+| ← / →   | Switch between followed teams                    |
+| ↑ / ↓   | Scroll headlines / page content                  |
+| `s`     | Toggle player stats (MLB) / standings (others)   |
+| `b`     | Toggle batting order (MLB only)                  |
+| `l`     | Toggle game leaders (NCAAF/NFL/NBA only)         |
+| `r`     | Refresh now                                      |
+| `a`     | Follow / unfollow teams                          |
+| `p`     | Pause / resume live auto-refresh                 |
+| `d`     | Toggle dark / light theme                        |
+| `?`     | Help screen                                      |
+| `q`     | Quit                                             |
 
 Live scores auto-refresh every 20 seconds while a game is in progress,
 same cadence as the Flutter app, and stop once the game goes final.
+
+In the team picker (`a`): `b`/`c`/`f`/`n` jump straight to baseball,
+college football, (NFL) football, or basketball; groups start collapsed
+and `enter` expands one; `escape` asks you to confirm (y/n) before
+exiting, listing your followed teams.
 
 ## Project layout
 
 ```
 sportspages_tui/
-├── app.py              # Textual App — main screen, key bindings, live refresh
-├── rendering.py         # pure functions building the Rich renderables (masthead, box score, etc.)
-├── mlb_api.py           # MLB Stats API + ESPN news/odds clients (async)
-├── mlb_teams.py         # static team/league/division table
-├── models.py            # dataclasses (BoxScore, TeamSide, PlayerStat, Headline, ...)
-├── config.py            # favorites persistence (~/.config/sportspages-tui/)
-├── date_format.py       # short (body) vs full (masthead) date formatting
+├── app.py                  # Textual App — main screen, key bindings, live refresh
+├── rendering.py            # pure functions building the Rich renderables (masthead, box score, etc.)
+├── mlb_api.py              # MLB Stats API + ESPN news/odds client (async)
+├── mlb_teams.py            # static MLB team/league/division table
+├── models.py               # MLB dataclasses (BoxScore, TeamSide, PlayerStat, Headline, ...)
+├── espn_period_sport.py    # shared ESPN "site API" parsing for NCAAF/NFL/NBA
+├── period_models.py        # shared dataclasses for those three (PeriodBoxScore, StandingEntry, ...)
+├── ncaaf_api.py / ncaaf_teams.py   # NCAAF-specific bits: AP rankings, conferences
+├── nfl_api.py   / nfl_teams.py     # NFL-specific bits: conferences/divisions
+├── nba_api.py   / nba_teams.py     # NBA-specific bits: conferences/divisions, PTS/REB/AST leaders
+├── config.py               # favorites persistence (~/.config/sportspages-tui/)
+├── date_format.py          # short (body) vs full (masthead) date formatting
 ├── screens/
-│   ├── team_picker.py   # MLB > league > division > team, with search
-│   └── help.py          # keybinding reference overlay
-└── app.tcss              # styling
+│   ├── team_picker.py      # 4-sport picker: league/conference > division, with search
+│   └── help.py             # keybinding reference overlay
+└── app.tcss                 # styling
 ```
 
 ## Testing

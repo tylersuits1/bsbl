@@ -1,6 +1,6 @@
-"""Manual smoke test — drives the real app against live MLB + NCAAF data
-via Textual's headless test pilot. Not a pytest suite (network + timing
-dependent); run directly: `python tests/smoke_test.py`.
+"""Manual smoke test — drives the real app against live MLB/NCAAF/NFL/NBA
+data via Textual's headless test pilot. Not a pytest suite (network +
+timing dependent); run directly: `python tests/smoke_test.py`.
 """
 
 import asyncio
@@ -17,7 +17,9 @@ from sportspages_tui.screens.team_picker import TeamPickerScreen
 
 
 async def main() -> None:
-    config.save_favorites([("MLB", "ATL"), ("MLB", "MIL"), ("NCAAF", "UGA")])
+    config.save_favorites([
+        ("MLB", "ATL"), ("MLB", "MIL"), ("NCAAF", "UGA"), ("NFL", "SF"), ("NBA", "LAL"),
+    ])
 
     app = SportsPagesApp()
     async with app.run_test(size=(100, 55)) as pilot:
@@ -26,7 +28,7 @@ async def main() -> None:
         assert app.current_team.sport == "MLB" and app.current_team.abbreviation == "ATL"
         assert app.last_updated is not None
         print("=== Page ===", f"{app.current_index + 1}/{len(app.teams)}")
-        assert app.current_index == 0 and len(app.teams) == 3
+        assert app.current_index == 0 and len(app.teams) == 5
 
         headline_list = app.screen.query_one("#headlines-list", ListView)
         print("=== Headline items in list ===", len(headline_list))
@@ -67,8 +69,20 @@ async def main() -> None:
         print("=== NCAAF 'l' — show_leaders ===", app._body.show_leaders)
         assert app._body.show_leaders is True
 
-        await pilot.press("left")
-        await pilot.press("left")
+        # Cross into NFL, then NBA — same PeriodBoxScore render path,
+        # should load without crashing on either.
+        await pilot.press("right")
+        await pilot.pause(3)
+        print("=== After right arrow (into NFL) ===", app.current_team.full_name)
+        assert app.current_team.sport == "NFL" and app.current_team.abbreviation == "SF"
+
+        await pilot.press("right")
+        await pilot.pause(3)
+        print("=== After right arrow (into NBA) ===", app.current_team.full_name)
+        assert app.current_team.sport == "NBA" and app.current_team.abbreviation == "LAL"
+
+        for _ in range(4):
+            await pilot.press("left")
         await pilot.pause(2)
         print("=== Back to first team ===", app.current_team.full_name)
         assert app.current_team.abbreviation == "ATL"
@@ -89,7 +103,7 @@ async def main() -> None:
         print("=== After 'd' — theme ===", app.theme)
         assert app.theme == "ansi-light"
 
-        # -- team picker: sport tabs, collapsible groups, search clear,
+        # -- team picker: 4 sport tabs, collapsible groups, search clear,
         # escape confirmation --
         await pilot.press("a")
         await pilot.pause(0.5)
@@ -97,18 +111,29 @@ async def main() -> None:
         assert isinstance(picker, TeamPickerScreen)
         assert picker._sport == "MLB"
 
-        # 'f'/'b' are screen-level hotkeys, so (like Enter) they need the
-        # team list focused rather than the search box — the search box
-        # has to accept every letter as literal query text, since plenty
-        # of team names start with f or b.
+        # Sport-select keys are screen-level hotkeys, so (like Enter)
+        # they need the team list focused rather than the search box —
+        # the search box has to accept every letter as literal query
+        # text, since plenty of team names start with b/c/f/n.
         team_list = picker.query_one("#team-list", ListView)
         team_list.focus()
         await pilot.pause(0.1)
 
+        await pilot.press("c")
+        await pilot.pause(0.2)
+        print("=== Picker sport after 'c' ===", picker._sport)
+        assert picker._sport == "NCAAF"
+
         await pilot.press("f")
         await pilot.pause(0.2)
         print("=== Picker sport after 'f' ===", picker._sport)
-        assert picker._sport == "NCAAF"
+        assert picker._sport == "NFL"
+
+        await pilot.press("n")
+        await pilot.pause(0.2)
+        print("=== Picker sport after 'n' ===", picker._sport)
+        assert picker._sport == "NBA"
+
         await pilot.press("b")
         await pilot.pause(0.2)
         print("=== Picker sport after 'b' ===", picker._sport)
@@ -132,7 +157,7 @@ async def main() -> None:
         await pilot.pause(0.2)
         print("=== Picker confirming ===", picker._confirming)
         assert picker._confirming is True
-        await pilot.press("n")
+        await pilot.press("n")  # cancels the confirm — 'n' means NBA only when NOT confirming
         await pilot.pause(0.2)
         assert picker._confirming is False
 
