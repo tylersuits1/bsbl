@@ -1,31 +1,27 @@
-"""Team picker — one of four sports (MLB/NCAAF/NFL/NBA), browsed by
-league/conference > division, with search scoped to whichever sport tab
-is active. 'b' jumps to baseball (MLB), 'c' to college football
-(NCAAF), 'f' to (NFL) football, 'n' to basketball (NBA), 'p' to a live
-NFL player search for fantasy tracking — these lowercase keys only fire
-when the team list is focused (the search box needs every lowercase
-letter as literal query text). Shift+ the same letter (B/C/F/N/P) does
-the same switch but works even while typing in the search box, so you
-never have to click off it just to change sport. Reached on first
-launch (no favorites yet) or via the 'a' hotkey. Groups start collapsed
-so browsing isn't one long scroll; Escape asks for a y/n confirmation
-before handing control back to the app.
+"""Team picker — one continuous list spanning every sport (MLB, NCAAF,
+NFL, NBA), each as its own section of league/conference > division >
+team, separated by a rule so scrolling from one sport into the next
+reads as a clear break. Search matches teams across all sports at once
+(tagged by sport in the results), so there's no per-sport mode to
+switch. A pinned entry at the top opens Fantasy football player search
+on its own screen, since players don't fit this team tree. Reached on
+first launch (no favorites yet) or via the 'a' hotkey. Division groups
+start collapsed so browsing isn't one long scroll; Escape asks for a
+y/n confirmation before handing control back to the app.
 """
 
 from __future__ import annotations
 
-import asyncio
-
-from textual import events, on, work
+from rich.rule import Rule
+from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
-from textual.message import Message
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Input, ListItem, ListView, Static
 
 from .. import config, mlb_teams, nba_teams, ncaaf_teams, nfl_teams
-from ..fantasy_api import FantasyError, PlayerSearchResult, fetch_player_profile, search_players
+from .fantasy_picker import FantasyPickerScreen
 
 _MLB_DIVISIONS = ("East", "Central", "West")
 
@@ -36,52 +32,14 @@ _TEAM_MODULES = {
     "NBA": nba_teams,
 }
 
-_SPORT_LABELS = {"MLB": "MLB", "NCAAF": "NCAAF", "NFL": "NFL", "NBA": "NBA", "FANTASY": "FANTASY"}
-
-_SEARCH_PLACEHOLDER = "Search teams, or leave blank to browse"
-_FANTASY_PLACEHOLDER = "Search NFL players by name"
-
-_SHIFT_SWITCH_SPORTS = {"B": "MLB", "C": "NCAAF", "F": "NFL", "N": "NBA", "P": "FANTASY"}
-
-
-class SportSearchInput(Input):
-    """The picker's search box. `Input._on_key` normally consumes every
-    printable character itself (inserting it and stopping the event)
-    before Textual's bindings system ever sees it — including capital
-    letters — so a plain Binding on "B"/"C"/etc, even with
-    priority=True, never fires while this has focus. Intercepting here,
-    at the one place that actually owns the keystroke, is what makes
-    Shift+<letter> switch sport without leaving the search box.
-    """
-
-    class ShiftSwitch(Message):
-        def __init__(self, letter: str) -> None:
-            self.letter = letter
-            super().__init__()
-
-    async def _on_key(self, event: events.Key) -> None:
-        if event.character in _SHIFT_SWITCH_SPORTS:
-            event.stop()
-            event.prevent_default()
-            self.post_message(self.ShiftSwitch(event.character))
-            return
-        await super()._on_key(event)
+_SEARCH_PLACEHOLDER = "Search all teams, or leave blank to browse"
 
 
 class TeamPickerScreen(Screen):
     BINDINGS = [
         Binding("escape", "request_exit", "Back"),
-        Binding("b", "show_baseball", "Baseball"),
-        Binding("c", "show_college_football", "College FB"),
-        Binding("f", "show_football", "Football"),
-        Binding("p", "show_fantasy", "Fantasy"),
         Binding("y", "confirm_yes", "Confirm"),
-        Binding("n", "confirm_no", "Basketball / Cancel"),
-        # Shift+letter mirrors of the sport-switch keys above (Shift+B
-        # for baseball, etc.) work even while the search box has focus —
-        # handled by SportSearchInput.ShiftSwitch below, since Input
-        # consumes every printable character itself before any Binding,
-        # even a priority one, gets a chance to see it.
+        Binding("n", "confirm_no", "Cancel"),
         # Shadow the main app's remaining global hotkeys so they don't
         # leak into this screen's footer, or silently mutate the hidden
         # page behind it (e.g. pressing 's' here toggling its stats panel).
@@ -98,20 +56,20 @@ class TeamPickerScreen(Screen):
 
     def __init__(self) -> None:
         super().__init__()
-        self._sport = "MLB"
         self._query = ""
         self._confirming = False
-        self._fantasy_results: list[PlayerSearchResult] = []
-        # Groups start collapsed — makes the initial browse view a short
-        # list of headers instead of every team at once.
+        # Division groups start collapsed — makes the initial browse view
+        # a short list of sport/division headers instead of every team
+        # in every sport at once. Keyed per sport so each sport's
+        # collapse state is independent.
         self._collapsed: dict[str, set[str]] = {
             sport: {key for key, _, _ in self._groups_for_sport(sport)} for sport in _TEAM_MODULES
         }
 
     def compose(self) -> ComposeResult:
-        yield Static(id="picker-title")
+        yield Static("[bold]FOLLOW A TEAM[/bold]  [dim](type to search every sport)[/dim]", id="picker-title")
         with Horizontal(id="search-row"):
-            yield SportSearchInput(placeholder=_SEARCH_PLACEHOLDER, id="search")
+            yield Input(placeholder=_SEARCH_PLACEHOLDER, id="search")
             yield Button("✕", id="clear-search")
         with VerticalScroll(id="picker-body"):
             yield ListView(id="team-list")
@@ -119,16 +77,12 @@ class TeamPickerScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        self._update_title()
         self._refresh_list()
 
     @on(Input.Changed, "#search")
     def on_search_changed(self, event: Input.Changed) -> None:
         self._query = event.value.strip().lower()
-        if self._sport == "FANTASY":
-            self._search_fantasy_players(event.value.strip())
-        else:
-            self._refresh_list()
+        self._refresh_list()
 
     @on(Button.Pressed, "#clear-search")
     def on_clear_search(self, event: Button.Pressed) -> None:
@@ -136,17 +90,7 @@ class TeamPickerScreen(Screen):
         search.value = ""
         search.focus()
         self._query = ""
-        if self._sport == "FANTASY":
-            self._fantasy_results = []
-            self._refresh_list()
-        else:
-            self._refresh_list()
-
-    def _update_title(self) -> None:
-        self.query_one("#picker-title", Static).update(
-            f"[bold]FOLLOW A TEAM — {_SPORT_LABELS[self._sport]}[/bold]  "
-            "[dim](b/c/f/n/p, or ⇧B ⇧C ⇧F ⇧N ⇧P while searching)[/dim]"
-        )
+        self._refresh_list()
 
     def _groups_for_sport(self, sport: str) -> list[tuple[str, str, list]]:
         """(group key, display label, teams) for every non-empty
@@ -190,21 +134,27 @@ class TeamPickerScreen(Screen):
         list_view = self.query_one("#team-list", ListView)
         list_view.clear()
 
-        if self._sport == "FANTASY":
-            self._render_fantasy_list(list_view)
-            return
-
         favorites = config.load_favorites()
 
         if self._query:
-            for team in self._search_matches():
-                list_view.append(self._team_item(team, favorites))
+            matches = self._search_matches()
+            for sport, team in matches:
+                list_view.append(self._team_item(sport, team, favorites, show_sport=True))
+            if not matches:
+                list_view.append(ListItem(Static("[italic dim]No matching teams.[/italic dim]"), disabled=True))
             if len(list_view):
                 list_view.index = 0
             return
 
-        for key, label, teams in self._groups_for_sport(self._sport):
-            self._append_group(list_view, self._sport, key, label, teams, favorites)
+        fantasy_item = ListItem(Static("[bold]\U0001f3c8 FANTASY[/bold] — search & follow NFL players"))
+        fantasy_item.data = ("fantasy_open",)
+        list_view.append(fantasy_item)
+
+        for sport in _TEAM_MODULES:
+            list_view.append(ListItem(Static(Rule(style="dim")), disabled=True))
+            list_view.append(ListItem(Static(f"[bold underline]{sport}[/bold underline]"), disabled=True))
+            for key, label, teams in self._groups_for_sport(sport):
+                self._append_group(list_view, sport, key, label, teams, favorites)
 
         # ListView needs a highlighted item before Enter/click do
         # anything — without this, a user opening the picker and
@@ -213,84 +163,35 @@ class TeamPickerScreen(Screen):
         if len(list_view):
             list_view.index = 0
 
-    def _render_fantasy_list(self, list_view: ListView) -> None:
-        followed = config.load_fantasy_players()
-        if self._query:
-            for result in self._fantasy_results:
-                is_followed = any(p.get("espn_id") == result.espn_id for p in followed)
-                star = "★" if is_followed else "☆"
-                item = ListItem(Static(f"{star} {result.name} ({result.team_name})"))
-                item.data = ("fantasy_search", result.espn_id, result.name, result.team_name)
-                list_view.append(item)
-            if not self._fantasy_results:
-                list_view.append(ListItem(Static("[italic dim]No matching players.[/italic dim]"), disabled=True))
-        elif followed:
-            for player in followed:
-                label = f"★ {player.get('name', '?')}"
-                extra = ", ".join(p for p in (player.get("position", ""), player.get("team_abbr", "")) if p)
-                if extra:
-                    label += f" ({extra})"
-                item = ListItem(Static(label))
-                item.data = ("fantasy_remove", player.get("espn_id"))
-                list_view.append(item)
-        else:
-            list_view.append(ListItem(Static("[italic dim]Type a player name to search.[/italic dim]"), disabled=True))
-        if len(list_view):
-            list_view.index = 0
-
-    @work(exclusive=True)
-    async def _search_fantasy_players(self, query: str) -> None:
-        if not query:
-            self._fantasy_results = []
-            self._refresh_list()
-            return
-        await asyncio.sleep(0.3)  # debounce — avoid a request per keystroke
-        try:
-            self._fantasy_results = await search_players(self.app.http_client, query)
-        except FantasyError:
-            self._fantasy_results = []
-        self._refresh_list()
-
-    @work
-    async def _follow_fantasy_player(self, espn_id: int, name: str, team_name: str) -> None:
-        try:
-            profile = await fetch_player_profile(self.app.http_client, espn_id)
-            entry = {
-                "espn_id": espn_id, "name": profile.name, "position": profile.position,
-                "team_abbr": profile.team_abbr, "team_name": profile.team_name,
-            }
-        except FantasyError:
-            entry = {"espn_id": espn_id, "name": name, "position": "", "team_abbr": "", "team_name": team_name}
-        _, applied = config.toggle_fantasy_player(entry)
-        if not applied:
-            self.notify(f"You can track up to {config.MAX_FANTASY_PLAYERS} fantasy players", severity="warning")
-        self._refresh_list()
-
     def _append_group(
         self, list_view: ListView, sport: str, key: str, label: str, teams: list, favorites: list[tuple[str, str]]
     ) -> None:
         collapsed = key in self._collapsed[sport]
         arrow = "▸" if collapsed else "▾"
-        header = ListItem(Static(f"{arrow} [bold]{label}[/bold]"))
+        header = ListItem(Static(f"    {arrow} [bold]{label}[/bold]"))
         header.data = ("toggle", sport, key)
         list_view.append(header)
         if not collapsed:
             for team in teams:
-                list_view.append(self._team_item(team, favorites, indent=True))
+                list_view.append(self._team_item(sport, team, favorites, indent=True))
 
-    def _search_matches(self) -> list:
-        matches = [
-            t for t in _TEAM_MODULES[self._sport].TEAMS
-            if self._query in t.name.lower() or self._query in t.city.lower()
-        ]
-        matches.sort(key=lambda t: t.name)
+    def _search_matches(self) -> list[tuple[str, object]]:
+        matches = []
+        for sport, module in _TEAM_MODULES.items():
+            for team in module.TEAMS:
+                if self._query in team.name.lower() or self._query in team.city.lower():
+                    matches.append((sport, team))
+        matches.sort(key=lambda pair: pair[1].name)
         return matches
 
-    def _team_item(self, team, favorites: list[tuple[str, str]], indent: bool = False) -> ListItem:
-        star = "★" if (self._sport, team.abbreviation) in favorites else "☆"
-        prefix = "    " if indent else ""
-        item = ListItem(Static(f"{prefix}{star} {team.full_name}"))
-        item.data = ("team", self._sport, team.abbreviation)
+    def _team_item(
+        self, sport: str, team, favorites: list[tuple[str, str]], *, indent: bool = False, show_sport: bool = False
+    ) -> ListItem:
+        star = "★" if (sport, team.abbreviation) in favorites else "☆"
+        prefix = "        " if indent else ""
+        tag = f"[dim]{sport}[/dim] " if show_sport else ""
+        item = ListItem(Static(f"{prefix}{star} {tag}{team.full_name}"))
+        item.data = ("team", sport, team.abbreviation)
         return item
 
     @on(ListView.Selected, "#team-list")
@@ -313,53 +214,8 @@ class TeamPickerScreen(Screen):
             if not applied:
                 self.notify(f"You can follow up to {config.MAX_FAVORITES} teams", severity="warning")
             self._refresh_list()
-        elif kind == "fantasy_search":
-            _, espn_id, name, team_name = data
-            self._follow_fantasy_player(espn_id, name, team_name)
-        elif kind == "fantasy_remove":
-            _, espn_id = data
-            config.toggle_fantasy_player({"espn_id": espn_id})
-            self._refresh_list()
-
-    def action_show_baseball(self) -> None:
-        self._switch_sport("MLB")
-
-    def action_show_college_football(self) -> None:
-        self._switch_sport("NCAAF")
-
-    def action_show_football(self) -> None:
-        self._switch_sport("NFL")
-
-    def action_show_fantasy(self) -> None:
-        self._switch_sport("FANTASY")
-
-    @on(SportSearchInput.ShiftSwitch)
-    def on_shift_switch(self, message: SportSearchInput.ShiftSwitch) -> None:
-        # Shift+<letter> — same switch as the plain keys above, but
-        # keeps whatever's already typed and re-searches it under the
-        # new sport instead of clearing it, since this fires without
-        # ever taking focus off the search box.
-        sport = _SHIFT_SWITCH_SPORTS.get(message.letter)
-        if sport:
-            self._switch_sport(sport, keep_query=True)
-
-    def _switch_sport(self, sport: str, *, keep_query: bool = False) -> None:
-        if self._confirming or self._sport == sport:
-            return
-        self._sport = sport
-        search = self.query_one("#search", Input)
-        search.placeholder = _FANTASY_PLACEHOLDER if sport == "FANTASY" else _SEARCH_PLACEHOLDER
-        self._update_title()
-
-        if not keep_query:
-            self._query = ""
-            search.value = ""
-
-        self._fantasy_results = []
-        if sport == "FANTASY" and self._query:
-            self._search_fantasy_players(self._query)
-        else:
-            self._refresh_list()
+        elif kind == "fantasy_open":
+            self.app.push_screen(FantasyPickerScreen())
 
     def action_request_exit(self) -> None:
         if self._confirming:
@@ -393,11 +249,7 @@ class TeamPickerScreen(Screen):
         self.dismiss()
 
     def action_confirm_no(self) -> None:
-        # 'n' is dual-purpose: switch to basketball when browsing, but
-        # cancel the exit-confirmation prompt when it's showing — the
-        # two states never overlap, so one key does both jobs.
         if not self._confirming:
-            self._switch_sport("NBA")
             return
         self._confirming = False
         self.query_one("#confirm-box", Static).display = False

@@ -104,41 +104,17 @@ async def main() -> None:
         print("=== After 'd' — theme ===", app.theme)
         assert app.theme == "ansi-light"
 
-        # -- team picker: 4 sport tabs, collapsible groups, search clear,
+        # -- team picker: one unified list across MLB/NCAAF/NFL/NBA,
+        # collapsible division groups, cross-sport search, search clear,
         # escape confirmation --
         await pilot.press("a")
         await pilot.pause(0.5)
         picker = app.screen
         assert isinstance(picker, TeamPickerScreen)
-        assert picker._sport == "MLB"
 
-        # Sport-select keys are screen-level hotkeys, so (like Enter)
-        # they need the team list focused rather than the search box —
-        # the search box has to accept every letter as literal query
-        # text, since plenty of team names start with b/c/f/n.
         team_list = picker.query_one("#team-list", ListView)
-        team_list.focus()
-        await pilot.pause(0.1)
-
-        await pilot.press("c")
-        await pilot.pause(0.2)
-        print("=== Picker sport after 'c' ===", picker._sport)
-        assert picker._sport == "NCAAF"
-
-        await pilot.press("f")
-        await pilot.pause(0.2)
-        print("=== Picker sport after 'f' ===", picker._sport)
-        assert picker._sport == "NFL"
-
-        await pilot.press("n")
-        await pilot.pause(0.2)
-        print("=== Picker sport after 'n' ===", picker._sport)
-        assert picker._sport == "NBA"
-
-        await pilot.press("b")
-        await pilot.pause(0.2)
-        print("=== Picker sport after 'b' ===", picker._sport)
-        assert picker._sport == "MLB"
+        print("=== Picker items (browse, all sports + Fantasy entry) ===", len(team_list))
+        assert len(team_list) > 0
 
         search = picker.query_one("#search", Input)
         search.value = "brave"
@@ -149,34 +125,26 @@ async def main() -> None:
         print("=== Search 'brave' matches ===", len(team_list))
         assert len(team_list) == 1
 
+        # Search spans every sport at once now — "georgia" should find
+        # NCAAF's Georgia Bulldogs without switching anything.
+        search.value = "georgia"
+        picker._query = "georgia"
+        picker._refresh_list()
+        await pilot.pause(0.2)
+        team_list = picker.query_one("#team-list", ListView)
+        print("=== Cross-sport search 'georgia' matches ===", len(team_list))
+        assert len(team_list) >= 1
+
         await pilot.click("#clear-search")
         await pilot.pause(0.2)
         print("=== Search value after clear ===", repr(search.value))
         assert search.value == ""
 
-        # Shift+<letter> switches sport WITHOUT leaving the search box —
-        # unlike the plain keys above, it works while typing, and keeps
-        # the query so it re-searches under the new sport.
-        search.focus()
-        await pilot.pause(0.1)
-        await pilot.press(*"card")
-        await pilot.press("C")
-        await pilot.pause(0.3)
-        print("=== Picker sport after Shift+C while typing ===", picker._sport, "query kept:", repr(search.value))
-        assert picker._sport == "NCAAF"
-        assert search.value == "card"
-        assert app.focused is search
-        await pilot.press("B")
-        await pilot.pause(0.2)
-        assert picker._sport == "MLB" and search.value == "card"
-        await pilot.click("#clear-search")
-        await pilot.pause(0.2)
-
         await pilot.press("escape")
         await pilot.pause(0.2)
         print("=== Picker confirming ===", picker._confirming)
         assert picker._confirming is True
-        await pilot.press("n")  # cancels the confirm — 'n' means NBA only when NOT confirming
+        await pilot.press("n")  # cancels the confirmation prompt
         await pilot.pause(0.2)
         assert picker._confirming is False
 

@@ -23,12 +23,8 @@ _KEYS = [
 ]
 
 _PICKER_KEYS = [
-    ("b", "Browse baseball (MLB)"),
-    ("c", "Browse college football (NCAAF)"),
-    ("f", "Browse football (NFL)"),
-    ("n", "Browse basketball (NBA)"),
-    ("p", "Search NFL players to track for Fantasy"),
-    ("enter", "Expand/collapse a group, or follow/unfollow a team/player"),
+    ("type to search", "Search teams across every sport at once"),
+    ("enter", "Expand/collapse a division, follow/unfollow a team, or open Fantasy"),
     ("escape", "Ask to exit, listing your followed teams (y/n)"),
 ]
 

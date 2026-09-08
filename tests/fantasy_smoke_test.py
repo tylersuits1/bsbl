@@ -14,6 +14,7 @@ from textual.widgets import ListView
 
 from sportspages_tui import config
 from sportspages_tui.app import SportsPagesApp
+from sportspages_tui.screens.fantasy_picker import FantasyPickerScreen
 from sportspages_tui.screens.team_picker import TeamPickerScreen
 
 
@@ -29,23 +30,28 @@ async def main() -> None:
         picker = app.screen
         assert isinstance(picker, TeamPickerScreen)
 
+        # The pinned "FANTASY" entry is the first row in the unified
+        # list — selecting it pushes the dedicated player-search screen.
         team_list = picker.query_one("#team-list", ListView)
         team_list.focus()
+        team_list.index = 0
         await pilot.pause(0.1)
-        await pilot.press("p")
-        await pilot.pause(0.2)
-        print("=== Picker sport after 'p' ===", picker._sport)
-        assert picker._sport == "FANTASY"
+        await pilot.press("enter")
+        await pilot.pause(0.3)
+        print("=== Screen stack depth after opening Fantasy ===", len(app.screen_stack))
+        assert len(app.screen_stack) == 3
+        fantasy_screen = app.screen
+        assert isinstance(fantasy_screen, FantasyPickerScreen)
 
         await pilot.click("#search")
         await pilot.press(*"mahomes")
         await pilot.pause(1.0)  # debounce + live search
-        team_list = picker.query_one("#team-list", ListView)
-        print("=== Fantasy search results ===", len(team_list))
-        assert len(team_list) >= 1
+        player_list = fantasy_screen.query_one("#player-list", ListView)
+        print("=== Fantasy search results ===", len(player_list))
+        assert len(player_list) >= 1
 
-        team_list.focus()
-        team_list.index = 0
+        player_list.focus()
+        player_list.index = 0
         await pilot.pause(0.1)
         await pilot.press("enter")
         await pilot.pause(1.0)  # profile-fetch worker
@@ -54,7 +60,13 @@ async def main() -> None:
         print("=== Followed fantasy players ===", followed)
         assert len(followed) == 1 and followed[0]["position"] == "QB"
 
-        await pilot.press("escape")
+        await pilot.press("escape")  # back to the team picker
+        await pilot.pause(0.3)
+        print("=== Screen stack depth after Fantasy back ===", len(app.screen_stack))
+        assert len(app.screen_stack) == 2
+        assert isinstance(app.screen, TeamPickerScreen)
+
+        await pilot.press("escape")  # exit-confirmation prompt
         await pilot.pause(0.2)
         await pilot.press("y")
         await pilot.pause(0.5)
