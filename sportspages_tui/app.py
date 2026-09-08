@@ -1,8 +1,7 @@
 """SportsPages TUI — a newspaper-styled terminal client for following
-MLB, NCAAF, NFL, and NBA games, in the spirit of Newsboat: launch into a
-scrollable page for your followed teams, arrow left/right between them,
-arrow up/down through the news, single-letter hotkeys for everything
-else.
+MLB games, in the spirit of Newsboat: launch into a scrollable page for
+your followed teams, arrow left/right between them, arrow up/down
+through the news, single-letter hotkeys for everything else.
 """
 
 from __future__ import annotations
@@ -10,7 +9,6 @@ from __future__ import annotations
 import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Union
 
 import httpx
 from rich.console import Group
@@ -19,32 +17,19 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import ListItem, ListView, Static
 
-from . import config, mlb_teams, nba_teams, ncaaf_teams, nfl_teams
-from . import espn_period_sport as common
+from . import config, mlb_teams
 from .date_format import format_full_date
-from .fantasy_api import FantasyError, FantasyPlayerStats, fetch_player_stats
-from .mlb_api import MlbNewsService, MlbStatsError, MlbStatsService, headlines_for_team
+from .mlb_api import MlbStatsError, MlbStatsService, headlines_for_team
 from .models import BoxScore, Headline, PlayerStat
-from .nba_api import NbaNewsService, NbaStatsService
-from .ncaaf_api import NcaafNewsService, NcaafStatsService
-from .nfl_api import NflNewsService, NflStatsService
 from .news_sources import fetch_bing_news, fetch_google_news, merge_headlines
-from .period_models import PeriodBoxScore
 from .rendering import (
     batting_order_columns,
     detail_lines,
-    fantasy_table,
     inning_table,
-    leaders_group,
     masthead,
     matchup_line,
-    period_detail_lines,
-    period_matchup_line,
-    period_status_line,
     player_stats_table,
-    quarter_table,
     refresh_status_line,
-    standings_table,
     status_line,
 )
 from .screens.help import HelpScreen
@@ -52,47 +37,12 @@ from .screens.team_picker import TeamPickerScreen
 
 LIVE_REFRESH_SECONDS = 20
 
-# Team-lookup module per sport — every one exposes team_by_abbreviation().
-_TEAM_MODULES = {
-    "MLB": mlb_teams,
-    "NCAAF": ncaaf_teams,
-    "NFL": nfl_teams,
-    "NBA": nba_teams,
-}
-
-# "Period" sports share one PeriodBoxScore shape (quarters, standings,
-# game leaders) via espn_period_sport, unlike MLB's innings/box-score
-# shape. Each entry: (stats service class, news service class, query
-# suffix for web headline search, standings' secondary-column label).
-_PERIOD_SPORTS = {
-    "NCAAF": (NcaafStatsService, NcaafNewsService, "college football", "CONF"),
-    "NFL": (NflStatsService, NflNewsService, "NFL", "CONF"),
-    "NBA": (NbaStatsService, NbaNewsService, "NBA", "GB"),
-}
-
-
-class _FantasySentinel:
-    """Stands in for a "team" for the one aggregate Fantasy page — there's
-    no single team behind it, just whichever players you're tracking.
-    """
-
-    abbreviation = "FANTASY"
-    full_name = "Fantasy"
-
-
-_FANTASY_SENTINEL = _FantasySentinel()
-
 
 @dataclass
 class FollowedTeam:
-    """One entry in the followed-teams list — an MLB, NCAAF, NFL, or NBA
-    team, or the one aggregate Fantasy page, normalized behind the same
-    interface so the app can treat the list as sport-agnostic wherever
-    it doesn't need to branch.
-    """
+    """One entry in the followed-teams list."""
 
-    sport: str  # "MLB" | "NCAAF" | "NFL" | "NBA" | "FANTASY"
-    info: Union[mlb_teams.TeamInfo, ncaaf_teams.NcaafTeamInfo, nfl_teams.NflTeamInfo, nba_teams.NbaTeamInfo, _FantasySentinel]
+    info: mlb_teams.TeamInfo
 
     @property
     def abbreviation(self) -> str:
@@ -104,10 +54,9 @@ class FollowedTeam:
 
 
 class HeadlineItem(ListItem):
-    def __init__(self, headline: Headline, *, label: str | None = None) -> None:
-        title = f"{label}: {headline.title}" if label else headline.title
+    def __init__(self, headline: Headline) -> None:
         body = Group(
-            f"[bold]{title}[/bold]",
+            f"[bold]{headline.title}[/bold]",
             f"[italic dim]{headline.byline} | {headline.time_ago}[/italic dim]",
         )
         super().__init__(Static(body))
@@ -124,10 +73,8 @@ class MainScreen(VerticalScroll):
 
     def __init__(self) -> None:
         super().__init__(id="body-scroll")
-        self.show_stats = False       # MLB: player stats (s)
-        self.show_batting = False     # MLB: batting order (b)
-        self.show_standings = False   # NCAAF/NFL/NBA: standings (s)
-        self.show_leaders = False     # NCAAF/NFL/NBA: game leaders (l)
+        self.show_stats = False    # player stats (s)
+        self.show_batting = False  # batting order (b)
 
     def compose(self) -> ComposeResult:
         yield Static(id="masthead")
@@ -151,8 +98,6 @@ class MainScreen(VerticalScroll):
         page: int,
         total_pages: int,
     ) -> None:
-        self._show_batting_stats_sections()
-
         today = format_full_date(datetime.now())
         self.query_one("#masthead", Static).update(
             masthead(team.full_name, box.followed_team_record, today, page=page, total_pages=total_pages)
@@ -187,117 +132,6 @@ class MainScreen(VerticalScroll):
 
         self._render_headlines(headlines)
 
-    def render_period_team(
-        self,
-        team,
-        box: PeriodBoxScore,
-        headlines: list[Headline],
-        *,
-        last_updated: datetime | None,
-        paused: bool,
-        page: int,
-        total_pages: int,
-        standings_secondary_label: str = "CONF",
-    ) -> None:
-        """Shared renderer for NCAAF/NFL/NBA — identical box-score shape
-        (quarters, standings, game leaders) regardless of which of the
-        three it is; only the standings table's secondary column
-        (conference record vs. games-behind) differs.
-        """
-        self._show_batting_stats_sections()
-
-        today = format_full_date(datetime.now())
-        self.query_one("#masthead", Static).update(
-            masthead(team.full_name, box.followed_team_record, today, page=page, total_pages=total_pages)
-        )
-
-        lines = [
-            period_matchup_line(box), period_status_line(box), *period_detail_lines(box),
-            "", refresh_status_line(last_updated, paused),
-        ]
-        self.query_one("#summary", Static).update(Group(*lines))
-
-        self.query_one("#innings", Static).update(quarter_table(box))
-
-        standings_widget = self.query_one("#batting-section", Static)
-        if self.show_standings:
-            if box.standings:
-                standings_widget.update(Group(
-                    "[bold]STANDINGS (-s)[/bold]", "",
-                    standings_table(box.standings, secondary_label=standings_secondary_label),
-                ))
-            else:
-                standings_widget.update("[bold]STANDINGS (-s)[/bold]\n\n[italic]No standings available.[/italic]")
-        else:
-            standings_widget.update("[bold]STANDINGS (+s)[/bold]")
-
-        leaders_widget = self.query_one("#stats-section", Static)
-        if self.show_leaders:
-            if box.away_leaders or box.home_leaders:
-                leaders_widget.update(Group(
-                    "[bold]LEADERS (-l)[/bold]", "",
-                    leaders_group(
-                        box.away_leaders, box.home_leaders,
-                        box.away.abbreviation or "AWAY", box.home.abbreviation or "HOME",
-                    ),
-                ))
-            else:
-                leaders_widget.update("[bold]LEADERS (-l)[/bold]\n\n[italic]No leaders reported.[/italic]")
-        else:
-            leaders_widget.update("[bold]LEADERS (+l)[/bold]")
-
-        self._render_headlines(headlines)
-
-    def render_fantasy_page(
-        self,
-        rows: list[tuple[dict, FantasyPlayerStats, Headline | None]],
-        *,
-        last_updated: datetime | None,
-        paused: bool,
-        page: int,
-        total_pages: int,
-    ) -> None:
-        """The one aggregate page for every tracked fantasy player —
-        unlike every other page, this isn't one team's box score, so the
-        batting/stats sections (not applicable here) are hidden rather
-        than repurposed.
-        """
-        today = format_full_date(datetime.now())
-        self.query_one("#masthead", Static).update(
-            masthead("Fantasy", "", today, page=page, total_pages=total_pages)
-        )
-
-        count_line = f"Tracking {len(rows)} player{'s' if len(rows) != 1 else ''}" if rows else "No players tracked yet — press 'a' then 'p' to search"
-        lines = [count_line, "", refresh_status_line(last_updated, paused)]
-        self.query_one("#summary", Static).update(Group(*lines))
-
-        if rows:
-            self.query_one("#innings", Static).update(fantasy_table([(p, s) for p, s, _ in rows]))
-        else:
-            self.query_one("#innings", Static).update("")
-
-        self.query_one("#batting-section", Static).display = False
-        self.query_one("#stats-section", Static).display = False
-
-        headline_list = self.query_one("#headlines-list", ListView)
-        headline_list.clear()
-        any_headline = False
-        for player, _, headline in rows:
-            if headline is None:
-                continue
-            headline_list.append(HeadlineItem(headline, label=player.get("name", "")))
-            any_headline = True
-        if not any_headline:
-            headline_list.append(ListItem(Static("[italic dim]No headlines available.[/italic dim]"), disabled=True))
-        headline_list.focus()
-
-    def _show_batting_stats_sections(self) -> None:
-        """Fantasy's page hides these (not applicable); every other page
-        needs them visible again after a visit to Fantasy.
-        """
-        self.query_one("#batting-section", Static).display = True
-        self.query_one("#stats-section", Static).display = True
-
     def _render_headlines(self, headlines: list[Headline]) -> None:
         headline_list = self.query_one("#headlines-list", ListView)
         headline_list.clear()
@@ -320,7 +154,6 @@ class SportsPagesApp(App):
         ("down", "scroll_down", "Scroll Down"),
         ("s", "toggle_stats", "Stats"),
         ("b", "toggle_batting", "Batting"),
-        ("l", "toggle_leaders", "Leaders"),
         ("r", "refresh_now", "Refresh"),
         ("a", "manage_teams", "Follow"),
         ("p", "toggle_live", "Pause Live"),
@@ -333,17 +166,8 @@ class SportsPagesApp(App):
         super().__init__()
         self._http = httpx.AsyncClient(timeout=12.0)
         self.stats_service = MlbStatsService(self._http)
-        self.news_service = MlbNewsService(self._http)
-        # sport -> (stats service, news service) for the three period
-        # sports, all sharing the same fetch/render shape.
-        self.period_services = {
-            sport: (stats_cls(self._http), news_cls(self._http))
-            for sport, (stats_cls, news_cls, _, _) in _PERIOD_SPORTS.items()
-        }
         self.current_index = 0
         self.teams: list[FollowedTeam] = []
-        self.league_headlines: list[Headline] = []
-        self.period_headlines: dict[str, list[Headline]] = {sport: [] for sport in _PERIOD_SPORTS}
         self.last_updated: datetime | None = None
         self.live_paused = False
         self._live_timer = None
@@ -363,20 +187,16 @@ class SportsPagesApp(App):
         else:
             self._start_live_timer()
             self.load_current_team()
-        self._refresh_headlines()
 
     def _load_teams(self) -> None:
         entries = config.load_favorites()
         teams: list[FollowedTeam] = []
         for sport, abbr in entries:
-            module = _TEAM_MODULES.get(sport)
-            if not module:
+            if sport != "MLB":
                 continue
-            t = module.team_by_abbreviation(abbr)
+            t = mlb_teams.team_by_abbreviation(abbr)
             if t:
-                teams.append(FollowedTeam(sport, t))
-        if config.load_fantasy_players():
-            teams.append(FollowedTeam("FANTASY", _FANTASY_SENTINEL))
+                teams.append(FollowedTeam(t))
         self.teams = teams
         if self.current_index >= len(self.teams):
             self.current_index = max(0, len(self.teams) - 1)
@@ -389,19 +209,11 @@ class SportsPagesApp(App):
         if self.teams:
             self._start_live_timer()
             self.load_current_team()
-        self._refresh_headlines()
 
     def _start_live_timer(self) -> None:
         if self._live_timer:
             self._live_timer.stop()
         self._live_timer = self.set_interval(LIVE_REFRESH_SECONDS, self._auto_refresh)
-
-    @property
-    def http_client(self) -> httpx.AsyncClient:
-        """Shared client, reused by the team picker's fantasy-player
-        search so it isn't opening its own connection pool.
-        """
-        return self._http
 
     @property
     def current_team(self) -> FollowedTeam | None:
@@ -414,14 +226,7 @@ class SportsPagesApp(App):
         followed = self.current_team
         if not followed or not self._body:
             return
-        if followed.sport == "MLB":
-            await self._load_mlb_team(followed.info)
-        elif followed.sport == "FANTASY":
-            await self._load_fantasy_page()
-        else:
-            await self._load_period_team(followed.sport, followed.info)
-
-    async def _load_mlb_team(self, team: mlb_teams.TeamInfo) -> None:
+        team = followed.info
         try:
             box = await self.stats_service.fetch_game_for_team(team)
             stats = await self.stats_service.fetch_player_stats(team) if self._body.show_stats else []
@@ -430,7 +235,7 @@ class SportsPagesApp(App):
             return
 
         web_headlines = await self._fetch_web_headlines(f"{team.full_name} MLB")
-        merged = merge_headlines([self.league_headlines, web_headlines])
+        merged = merge_headlines([web_headlines])
         relevant = headlines_for_team(merged, team_city=team.city, team_name=team.name)
 
         self.last_updated = datetime.now().astimezone()
@@ -442,67 +247,9 @@ class SportsPagesApp(App):
         if box.status.value == "FINAL" and self._live_timer:
             self._live_timer.pause()
 
-    async def _load_period_team(self, sport: str, team) -> None:
-        stats_service, _ = self.period_services[sport]
-        _, _, query_suffix, standings_label = _PERIOD_SPORTS[sport]
-        try:
-            box = await stats_service.fetch_game_for_team(team)
-        except common.PeriodStatsError as e:
-            self.notify(f"Could not load {team.full_name}: {e}", severity="error")
-            return
-
-        web_headlines = await self._fetch_web_headlines(f"{team.full_name} {query_suffix}")
-        merged = merge_headlines([self.period_headlines[sport], web_headlines])
-        relevant = headlines_for_team(merged, team_city=team.city, team_name=team.name)
-
-        self.last_updated = datetime.now().astimezone()
-        self._body.render_period_team(
-            team, box, relevant,
-            last_updated=self.last_updated, paused=self.live_paused,
-            page=self.current_index + 1, total_pages=len(self.teams),
-            standings_secondary_label=standings_label,
-        )
-        if box.status.value == "FINAL" and self._live_timer:
-            self._live_timer.pause()
-
-    async def _load_fantasy_page(self) -> None:
-        players = config.load_fantasy_players()
-        rows: list[tuple[dict, FantasyPlayerStats, Headline | None]] = []
-        for player in players:
-            espn_id = player.get("espn_id")
-            try:
-                stats = await fetch_player_stats(self._http, espn_id) if espn_id is not None else FantasyPlayerStats()
-            except FantasyError:
-                stats = FantasyPlayerStats()
-            headline = await self._fetch_player_headline(player)
-            rows.append((player, stats, headline))
-
-        self.last_updated = datetime.now().astimezone()
-        self._body.render_fantasy_page(
-            rows, last_updated=self.last_updated, paused=self.live_paused,
-            page=self.current_index + 1, total_pages=len(self.teams),
-        )
-
-    async def _fetch_player_headline(self, player: dict) -> Headline | None:
-        """One article about the player, falling back to their team when
-        nothing player-specific turns up — same web-search sources used
-        for every other headline in the app.
-        """
-        name = player.get("name", "")
-        headlines = await self._fetch_web_headlines(f"{name} NFL") if name else []
-        if not headlines:
-            team_name = player.get("team_name", "")
-            if team_name:
-                headlines = await self._fetch_web_headlines(f"{team_name} NFL")
-        if not headlines:
-            return None
-        merged = merge_headlines([headlines])
-        return merged[0] if merged else None
-
     async def _fetch_web_headlines(self, query: str) -> list[Headline]:
-        """Google News + Bing News, scoped to this team, as extra sources
-        alongside ESPN's general feed — without these, a team with no
-        stories in ESPN's top-12 general feed shows almost nothing.
+        """Google News + Bing News RSS, scoped to this team — plain
+        public feeds, not an internal/undocumented API.
         """
         try:
             google, bing = await fetch_google_news(self._http, query), await fetch_bing_news(self._http, query)
@@ -510,28 +257,15 @@ class SportsPagesApp(App):
         except Exception:
             return []
 
-    @work(exclusive=True, group="headlines")
-    async def _refresh_headlines(self) -> None:
-        try:
-            self.league_headlines = await self.news_service.fetch_headlines()
-        except MlbStatsError:
-            self.league_headlines = []
-        for sport, (_, news_service) in self.period_services.items():
-            try:
-                self.period_headlines[sport] = await news_service.fetch_headlines()
-            except common.PeriodStatsError:
-                self.period_headlines[sport] = []
-        self.load_current_team()
-
     def _auto_refresh(self) -> None:
         if not self.live_paused:
             self.load_current_team()
 
     def _update_hints(self) -> None:
         # Only the hotkeys someone reaches for constantly. Stats (s),
-        # Batting (b), Leaders (l), Follow (a), Theme (d) and Pause Live
-        # (p) still work exactly as before — they're documented in the
-        # '?' help screen instead of taking up space here every time.
+        # Batting (b), Follow (a), Theme (d) and Pause Live (p) still
+        # work exactly as before — they're documented in the '?' help
+        # screen instead of taking up space here every time.
         parts = [
             ("←/→", "Teams"),
             ("↑/↓", "Headlines"),
@@ -574,11 +308,7 @@ class SportsPagesApp(App):
     def action_toggle_stats(self) -> None:
         if not self._body:
             return
-        followed = self.current_team
-        if followed and followed.sport in _PERIOD_SPORTS:
-            self._body.show_standings = not self._body.show_standings
-        else:
-            self._body.show_stats = not self._body.show_stats
+        self._body.show_stats = not self._body.show_stats
         self.load_current_team()
 
     def action_toggle_batting(self) -> None:
@@ -587,14 +317,8 @@ class SportsPagesApp(App):
         self._body.show_batting = not self._body.show_batting
         self.load_current_team()
 
-    def action_toggle_leaders(self) -> None:
-        if not self._body:
-            return
-        self._body.show_leaders = not self._body.show_leaders
-        self.load_current_team()
-
     def action_refresh_now(self) -> None:
-        self._refresh_headlines()
+        self.load_current_team()
 
     async def action_manage_teams(self) -> None:
         await self._open_picker()

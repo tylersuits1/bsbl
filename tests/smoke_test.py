@@ -1,6 +1,6 @@
-"""Manual smoke test — drives the real app against live MLB/NCAAF/NFL/NBA
-data via Textual's headless test pilot. Not a pytest suite (network +
-timing dependent); run directly: `python tests/smoke_test.py`.
+"""Manual smoke test — drives the real app against live MLB data via
+Textual's headless test pilot. Not a pytest suite (network + timing
+dependent); run directly: `python tests/smoke_test.py`.
 """
 
 import asyncio
@@ -17,19 +17,16 @@ from sportspages_tui.screens.team_picker import TeamPickerScreen
 
 
 async def main() -> None:
-    config.save_favorites([
-        ("MLB", "ATL"), ("MLB", "MIL"), ("NCAAF", "UGA"), ("NFL", "SF"), ("NBA", "LAL"),
-    ])
-    config.save_fantasy_players([])  # isolate from fantasy_smoke_test.py's state
+    config.save_favorites([("MLB", "ATL"), ("MLB", "MIL")])
 
     app = SportsPagesApp()
     async with app.run_test(size=(100, 55)) as pilot:
         await pilot.pause(3)
         print("=== Initial team ===", app.current_team.full_name)
-        assert app.current_team.sport == "MLB" and app.current_team.abbreviation == "ATL"
+        assert app.current_team.abbreviation == "ATL"
         assert app.last_updated is not None
         print("=== Page ===", f"{app.current_index + 1}/{len(app.teams)}")
-        assert app.current_index == 0 and len(app.teams) == 5
+        assert app.current_index == 0 and len(app.teams) == 2
 
         headline_list = app.screen.query_one("#headlines-list", ListView)
         print("=== Headline items in list ===", len(headline_list))
@@ -52,38 +49,7 @@ async def main() -> None:
         batting_widget = app.screen.query_one("#batting-section")
         assert batting_widget.display is True
 
-        # Cross into the NCAAF team — 's' should now drive standings (not
-        # MLB stats), and 'l' drives leaders, its own dedicated key.
-        await pilot.press("right")
-        await pilot.pause(3)
-        print("=== After right arrow (into NCAAF) ===", app.current_team.full_name)
-        assert app.current_team.sport == "NCAAF" and app.current_team.abbreviation == "UGA"
-
-        await pilot.press("s")
-        await pilot.pause(2)
-        print("=== NCAAF 's' — show_standings ===", app._body.show_standings, "show_stats unchanged:", app._body.show_stats)
-        assert app._body.show_standings is True
-        assert app._body.show_stats is True  # untouched, still set from the MLB team above
-
-        await pilot.press("l")
-        await pilot.pause(2)
-        print("=== NCAAF 'l' — show_leaders ===", app._body.show_leaders)
-        assert app._body.show_leaders is True
-
-        # Cross into NFL, then NBA — same PeriodBoxScore render path,
-        # should load without crashing on either.
-        await pilot.press("right")
-        await pilot.pause(3)
-        print("=== After right arrow (into NFL) ===", app.current_team.full_name)
-        assert app.current_team.sport == "NFL" and app.current_team.abbreviation == "SF"
-
-        await pilot.press("right")
-        await pilot.pause(3)
-        print("=== After right arrow (into NBA) ===", app.current_team.full_name)
-        assert app.current_team.sport == "NBA" and app.current_team.abbreviation == "LAL"
-
-        for _ in range(4):
-            await pilot.press("left")
+        await pilot.press("left")
         await pilot.pause(2)
         print("=== Back to first team ===", app.current_team.full_name)
         assert app.current_team.abbreviation == "ATL"
@@ -104,16 +70,15 @@ async def main() -> None:
         print("=== After 'd' — theme ===", app.theme)
         assert app.theme == "ansi-light"
 
-        # -- team picker: one unified list across MLB/NCAAF/NFL/NBA,
-        # collapsible division groups, cross-sport search, search clear,
-        # escape confirmation --
+        # -- team picker: collapsible division groups, search, search
+        # clear, escape confirmation --
         await pilot.press("a")
         await pilot.pause(0.5)
         picker = app.screen
         assert isinstance(picker, TeamPickerScreen)
 
         team_list = picker.query_one("#team-list", ListView)
-        print("=== Picker items (browse, all sports + Fantasy entry) ===", len(team_list))
+        print("=== Picker items (browse) ===", len(team_list))
         assert len(team_list) > 0
 
         search = picker.query_one("#search", Input)
@@ -124,16 +89,6 @@ async def main() -> None:
         team_list = picker.query_one("#team-list", ListView)
         print("=== Search 'brave' matches ===", len(team_list))
         assert len(team_list) == 1
-
-        # Search spans every sport at once now — "georgia" should find
-        # NCAAF's Georgia Bulldogs without switching anything.
-        search.value = "georgia"
-        picker._query = "georgia"
-        picker._refresh_list()
-        await pilot.pause(0.2)
-        team_list = picker.query_one("#team-list", ListView)
-        print("=== Cross-sport search 'georgia' matches ===", len(team_list))
-        assert len(team_list) >= 1
 
         await pilot.click("#clear-search")
         await pilot.pause(0.2)

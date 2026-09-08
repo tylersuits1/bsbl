@@ -12,9 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .date_format import format_clock_time, format_short_datetime, ordinal_inning
-from .fantasy_api import FantasyPlayerStats
 from .models import BoxScore, GameStatus, PlayerStat
-from .period_models import GameLeader, PeriodBoxScore, StandingEntry
 
 _STATUS_STYLE = {
     GameStatus.LIVE: "bold red",
@@ -59,8 +57,6 @@ def detail_lines(box: BoxScore) -> list[str]:
         parts.append(box.venue)
     if box.weather:
         parts.append(box.weather)
-    if box.money_line:
-        parts.append(f"ML {box.money_line}")
     if parts:
         lines.append("  |  ".join(parts))
 
@@ -174,126 +170,6 @@ def refresh_status_line(last_updated, paused: bool) -> Text:
     else:
         line.append("Not yet updated", style="dim italic")
     return line
-
-
-def period_matchup_line(box: PeriodBoxScore) -> Text:
-    away, home = box.away, box.home
-    away_label = f"#{away.rank} {away.name}" if away.rank else away.name
-    home_label = f"#{home.rank} {home.name}" if home.rank else home.name
-    if box.status == GameStatus.SCHEDULED and not box.away_periods and not box.home_periods:
-        return Text(f"{away_label} @ {home_label}", style="bold")
-    return Text(f"{away_label} {away.score} | {home_label} {home.score}", style="bold")
-
-
-def period_status_line(box: PeriodBoxScore) -> Text:
-    line = Text()
-    line.append_text(status_text(box.status))
-    detail = box.status_detail.strip()
-    if detail and detail.lower() != box.status.value.lower():
-        line.append(f"  {detail.upper()}")
-    return line
-
-
-def period_detail_lines(box: PeriodBoxScore) -> list[str]:
-    lines = []
-    parts = []
-    if box.venue:
-        parts.append(box.venue)
-    if box.weather:
-        parts.append(box.weather)
-    if box.money_line:
-        parts.append(f"ML {box.money_line}")
-    if parts:
-        lines.append("  |  ".join(parts))
-
-    if box.status == GameStatus.FINAL and box.next_game:
-        ng = box.next_game
-        prefix = "@" if ng.is_away else "vs "
-        lines.append("")
-        lines.append(f"UP NEXT: {prefix}{ng.opponent} · {format_short_datetime(ng.start)}")
-
-    return lines
-
-
-def quarter_table(box: PeriodBoxScore) -> Table:
-    q_count = max(len(box.away_periods), len(box.home_periods), 4)
-    table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False)
-    table.add_column("", width=5)
-    for i in range(1, q_count + 1):
-        label = str(i) if i <= 4 else ("OT" if i == 5 else f"{i - 4}OT")
-        table.add_column(label, justify="center", width=4)
-    table.add_column("T", justify="center", width=4, style="bold")
-
-    def row(label: str, periods: list, total: int) -> list[str]:
-        cells = [label]
-        for i in range(q_count):
-            value = periods[i] if i < len(periods) else None
-            cells.append("–" if value in (None, "") else str(value))
-        cells.append(str(total))
-        return cells
-
-    table.add_row(*row(box.away.abbreviation or "AWAY", box.away_periods, box.away.score))
-    table.add_row(*row(box.home.abbreviation or "HOME", box.home_periods, box.home.score))
-    return table
-
-
-def standings_table(entries: list[StandingEntry], *, secondary_label: str = "CONF") -> Table:
-    table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False, expand=True)
-    table.add_column("TEAM", ratio=3)
-    table.add_column(secondary_label, justify="center", ratio=1)
-    table.add_column("OVERALL", justify="center", ratio=1)
-    for e in entries:
-        table.add_row(e.team_name, e.secondary_record, e.overall_record)
-    return table
-
-
-def leaders_group(
-    away_leaders: list[GameLeader], home_leaders: list[GameLeader], away_label: str, home_label: str
-) -> Table:
-    def block(label: str, leaders: list[GameLeader]) -> Group:
-        lines = [Text(label, style="bold")]
-        if not leaders:
-            lines.append(Text("No leaders reported", style="italic dim"))
-        else:
-            for leader in leaders:
-                lines.append(Text(f"{leader.category}: {leader.player_name} ({leader.position}) — {leader.stat_line}"))
-        return Group(*lines)
-
-    table = Table.grid(padding=(0, 3))
-    table.add_column()
-    table.add_column()
-    table.add_row(block(away_label, away_leaders), block(home_label, home_leaders))
-    return table
-
-
-def fantasy_table(rows: list[tuple[dict, FantasyPlayerStats]]) -> Group:
-    table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False, expand=True)
-    table.add_column("PLAYER", ratio=3)
-    table.add_column("POS", justify="center", ratio=1)
-    table.add_column("TEAM", justify="center", ratio=1)
-    table.add_column("AVG PTS", justify="center", ratio=1)
-    table.add_column("PROJ*", justify="center", ratio=1)
-    table.add_column("EFF", justify="center", ratio=1)
-    for player, stats in rows:
-        if stats.completion_pct is not None:
-            eff = f"{stats.completion_pct:.1f}% CMP"
-        elif stats.points_per_carry is not None:
-            eff = f"{stats.points_per_carry:.2f} pt/car"
-        else:
-            eff = "—"
-        no_games = stats.games_played == 0
-        table.add_row(
-            player.get("name", "?"),
-            player.get("position", ""),
-            player.get("team_abbr", ""),
-            "—" if no_games else f"{stats.fantasy_points_per_game:.1f}",
-            "—" if no_games else f"{stats.projected_points:.1f}",
-            eff,
-        )
-    season_labels = {s.season_label for _, s in rows if s.season_label}
-    season_note = f" ({', '.join(sorted(season_labels))} season)" if season_labels else ""
-    footnote = Text(f"* PROJ is a season-average estimate{season_note} — not an official ESPN Fantasy projection.", style="dim italic")
-    return Group(table, "", footnote)
 
 
 def masthead(team_name: str, record: str, today: str, *, page: int, total_pages: int) -> Group:

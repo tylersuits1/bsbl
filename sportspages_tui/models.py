@@ -91,4 +91,3 @@ class BoxScore:
     scheduled_start: datetime | None = None
     next_game: NextGameInfo | None = None
     followed_team_record: str = ""
-    money_line: str = ""

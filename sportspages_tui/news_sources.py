@@ -1,13 +1,13 @@
-"""Two extra free, keyless news sources for headline variety alongside
-ESPN: Google News and Bing News, both of which publish a plain RSS
-search feed with no registration required. Mirrors web_news_service.dart
-in the Flutter sibling app. Google's and Bing's terms restrict these
-feeds to personal, non-commercial use in a feed reader — exactly this
-app's use case.
+"""Headlines from Google News and Bing News, both of which publish a
+plain RSS search feed with no registration required — no undocumented
+internal API, no scraping restrictions to work around. Mirrors
+web_news_service.dart in the Flutter sibling app. Google's and Bing's
+terms restrict these feeds to personal, non-commercial use in a feed
+reader — exactly this app's use case.
 
 Both are best-effort: any parse failure on an item (or the whole feed)
-is swallowed and yields an empty list, since these are supplementary
-sources and a broken feed shouldn't block the primary ESPN headlines.
+is swallowed and yields an empty list, since a broken feed shouldn't
+block the other one from still showing headlines.
 """
 
 from __future__ import annotations

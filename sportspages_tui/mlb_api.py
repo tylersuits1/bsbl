@@ -1,8 +1,9 @@
-"""Live MLB data from the public MLB Stats API (statsapi.mlb.com) plus
-ESPN's public news/odds feeds — no API key required for either. Ports
-the same logic (and the same "baseball day" 3am PST rollover) as the
-sibling Flutter app's MlbStatsService, so behavior stays consistent
-across both clients.
+"""Live MLB data from the public MLB Stats API (statsapi.mlb.com) — no
+API key required. Ports the same logic (and the same "baseball day" 3am
+PST rollover) as the sibling Flutter app's MlbStatsService, so behavior
+stays consistent across both clients. Deliberately has no dependency on
+ESPN's site — see news_sources.py for headlines instead, which are
+plain public RSS feeds rather than an undocumented internal API.
 """
 
 from __future__ import annotations
@@ -24,7 +25,6 @@ from .models import (
 
 STATS_BASE = "https://statsapi.mlb.com/api/v1"
 STATS_LIVE_BASE = "https://statsapi.mlb.com/api/v1.1"
-ESPN_MLB_BASE = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
 
 
 class MlbStatsError(Exception):
@@ -178,38 +178,6 @@ class MlbStatsService:
         stats.sort(key=lambda p: p.name)
         return stats
 
-    async def _fetch_odds(self, *, followed_team: mlb_teams.TeamInfo, opponent_abbr: str, followed_is_home: bool) -> str:
-        """Vegas moneyline for the followed team, via ESPN's public odds
-        feed. ESPN's event ids don't match MLB Stats API's gamePks, so
-        this matches today's ESPN scoreboard by team abbreviation pair
-        first. Empty string if no odds posted yet or no match found.
-        """
-        try:
-            date_str = _fmt_date(current_baseball_date()).replace("-", "")
-            scoreboard = await self._get_json(f"{ESPN_MLB_BASE}/scoreboard?dates={date_str}")
-            event_id = None
-            for event in scoreboard.get("events", []):
-                competitors = event["competitions"][0]["competitors"]
-                abbrs = {c["team"]["abbreviation"] for c in competitors}
-                if followed_team.abbreviation in abbrs and opponent_abbr in abbrs:
-                    event_id = event["id"]
-                    break
-            if event_id is None:
-                return ""
-
-            summary = await self._get_json(f"{ESPN_MLB_BASE}/summary?event={event_id}")
-            pickcenter = summary.get("pickcenter", [])
-            if not pickcenter:
-                return ""
-            odds = pickcenter[0]
-            side_odds = odds.get("homeTeamOdds" if followed_is_home else "awayTeamOdds") or {}
-            money_line = side_odds.get("moneyLine")
-            if money_line is None:
-                return ""
-            return f"+{money_line}" if isinstance(money_line, (int, float)) and money_line > 0 else str(money_line)
-        except Exception:
-            return ""
-
     async def _parse_live_feed(
         self,
         live: dict,
@@ -274,12 +242,6 @@ class MlbStatsService:
         followed_is_home = away_id != followed_team.stats_api_id
         followed_team_record = home_record if followed_is_home else away_record
 
-        money_line = await self._fetch_odds(
-            followed_team=followed_team,
-            opponent_abbr=away.abbreviation if followed_is_home else home.abbreviation,
-            followed_is_home=followed_is_home,
-        )
-
         return BoxScore(
             home=home, away=away, home_line=home_line, away_line=away_line,
             away_innings=away_innings, home_innings=home_innings,
@@ -289,7 +251,7 @@ class MlbStatsService:
             home_pitcher=home_pitcher, home_pitcher_ip=home_pitcher_ip,
             away_pitcher=away_pitcher, away_pitcher_ip=away_pitcher_ip,
             status=status, scheduled_start=scheduled_start, next_game=next_game,
-            followed_team_record=followed_team_record, money_line=money_line,
+            followed_team_record=followed_team_record,
         )
 
     def _line_score_from(self, totals: dict | None) -> LineScore:
@@ -430,56 +392,6 @@ class MlbStatsService:
         if not dates:
             return []
         return dates[0].get("games", [])
-
-
-class MlbNewsService:
-    """MLB headlines from ESPN's public (unofficial) news endpoint."""
-
-    def __init__(self, client: httpx.AsyncClient | None = None):
-        self._client = client or httpx.AsyncClient(timeout=12.0)
-        self._owns_client = client is None
-
-    async def aclose(self) -> None:
-        if self._owns_client:
-            await self._client.aclose()
-
-    async def fetch_headlines(self) -> list[Headline]:
-        try:
-            response = await self._client.get(f"{ESPN_MLB_BASE}/news?limit=12")
-        except httpx.HTTPError as e:
-            raise MlbStatsError(f"Could not reach news source: {e}") from e
-        if response.status_code != 200:
-            raise MlbStatsError(f"News source returned {response.status_code}")
-
-        data = response.json()
-        headlines = []
-        for article in data.get("articles", []):
-            published = article.get("published")
-            published_at = (
-                datetime.fromisoformat(published.replace("Z", "+00:00"))
-                if published
-                else datetime.now(timezone.utc)
-            )
-            web_link = (article.get("links") or {}).get("web", {})
-            headlines.append(Headline(
-                title=article.get("headline", "Untitled"),
-                byline=article.get("byline") or "ESPN",
-                time_ago=_time_ago(published_at),
-                url=web_link.get("href", ""),
-                published_at=published_at,
-            ))
-        return headlines
-
-
-def _time_ago(published_at: datetime) -> str:
-    diff = datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
-    minutes = int(diff.total_seconds() // 60)
-    if minutes < 60:
-        return f"{minutes} mins ago"
-    hours = minutes // 60
-    if hours < 24:
-        return f"{hours} hrs ago"
-    return f"{hours // 24} days ago"
 
 
 def headlines_for_team(
