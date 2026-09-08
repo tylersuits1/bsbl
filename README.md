@@ -1,12 +1,10 @@
 # sportspages-tui
 
 A newspaper-styled terminal UI for following MLB, NCAAF, NFL, and NBA
-games — plus a lightweight fantasy-football player tracker — the same
-spirit as the
-[the-sports-pages](https://github.com/tylersuits1/the-sports-pages)
-Flutter app, but for the terminal, in the tradition of tools like
-Newsboat: launch it, swipe left/right between your teams, scroll up/down
-through the news, single-letter hotkeys for everything else.
+games — plus a lightweight fantasy-football player tracker — in the
+tradition of tools like Newsboat: launch it, swipe left/right between
+your teams, scroll up/down through the news, single-letter hotkeys for
+everything else.
 
 Built with [Textual](https://textual.textualize.io/), pulling live data
 from the free, keyless MLB Stats API (`statsapi.mlb.com`) and ESPN's
@@ -42,6 +40,14 @@ from public season stats rather than your actual league's settings.
 
 ## Install
 
+**Homebrew** (macOS/Linux):
+
+```bash
+brew install tylersuits1/sportspages-tui/sportspages-tui
+```
+
+**From source:**
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -57,8 +63,7 @@ sportspages
 
 On first launch (no followed teams yet) it opens the team picker
 directly. Your followed teams persist between runs in
-`~/.config/sportspages-tui/favorites.json` — unlike the Flutter app,
-where favorites reset on restart.
+`~/.config/sportspages-tui/favorites.json`.
 
 ## Keys
 
@@ -77,7 +82,7 @@ where favorites reset on restart.
 | `q`     | Quit                                             |
 
 Live scores auto-refresh every 20 seconds while a game is in progress,
-same cadence as the Flutter app, and stop once the game goes final.
+and stop once the game goes final.
 
 In the team picker (`a`): one scrollable list covers every sport —
 MLB, then NCAAF, then NFL, then NBA, each broken into
@@ -129,3 +134,20 @@ python tests/fantasy_smoke_test.py   # search/follow/render for a real NFL playe
 `tests/screenshot_test.py` dumps an SVG render of the live app to
 `tests/screenshot.svg` for visual spot-checks (gitignored, not meant to
 be committed).
+
+## A note on data sources
+
+MLB data comes from the MLB Stats API; NCAAF/NFL/NBA scores, standings,
+rankings, odds, and news all come from ESPN's public `site.api.espn.com`
+endpoints — the same ones espn.com's own website calls, not a
+documented, licensed public API. Disney's (ESPN's parent company)
+Terms of Use prohibit automated/robotic access and scraping of their
+products, so pulling this data programmatically is against ESPN's
+terms as written, even though it's a small, personal, non-commercial
+tool and this style of hobby project is common. This is not legal
+advice — if that risk matters for your use case, evaluate it yourself
+before relying on this.
+
+## License
+
+[MIT](LICENSE)
