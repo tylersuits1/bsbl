@@ -43,10 +43,18 @@ class TeamPickerScreen(Screen):
         # Shadow the main app's remaining global hotkeys so they don't
         # leak into this screen's footer, or silently mutate the hidden
         # page behind it (e.g. pressing 's' here toggling its stats panel).
+        # 'b' and 'p' need shadowing now too — they used to be claimed by
+        # this screen's own sport-switch actions (Baseball/Fantasy),
+        # which shadowed them as a side effect; now that those actions
+        # are gone, the app's Batting/Pause-Live bindings would otherwise
+        # leak straight through. 'q' (Quit) is deliberately left
+        # unshadowed — quitting from the picker is fine.
         Binding("s", "noop", show=False),
+        Binding("b", "noop", show=False),
         Binding("l", "noop", show=False),
         Binding("r", "noop", show=False),
         Binding("a", "noop", show=False),
+        Binding("p", "noop", show=False),
         Binding("d", "noop", show=False),
         Binding("question_mark", "noop", show=False),
     ]

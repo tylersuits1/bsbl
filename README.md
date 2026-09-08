@@ -13,6 +13,16 @@ from the free, keyless MLB Stats API (`statsapi.mlb.com`) and ESPN's
 public site/news/search/odds feeds — no API key required, no account,
 nothing to sign up for.
 
+<p align="center">
+  <img src="screenshots/main-page.svg" alt="A team's game page — masthead, matchup, box score, batting order, player stats" width="700">
+</p>
+<p align="center">
+  <img src="screenshots/team-picker.svg" alt="The team picker — one scrollable tree across MLB/NCAAF/NFL/NBA" width="700">
+</p>
+<p align="center">
+  <img src="screenshots/fantasy-page.svg" alt="The aggregate Fantasy page for tracked NFL players" width="700">
+</p>
+
 ## Status
 
 MLB, NCAAF, NFL, and NBA are all supported. MLB has its own box-score
@@ -21,9 +31,10 @@ share one "period sport" shape (quarters, standings, per-game leaders)
 since their ESPN feeds are structurally identical.
 
 There's also a Fantasy page: search and track individual NFL players
-(press `p` in the team picker) and see them all on one aggregate page —
-season averages, a naive next-game point estimate, and a headline per
-player. This is **not** tied to a real ESPN Fantasy league (that API
+(via the pinned "FANTASY" entry at the top of the team picker) and see
+them all on one aggregate page — season averages, a naive next-game
+point estimate, and a headline per player. This is **not** tied to a
+real ESPN Fantasy league (that API
 needs a league id and, for private leagues, browser auth cookies we
 don't have) — "PROJ" is our own season-average estimate, not ESPN's own
 projection engine, and scoring is a standard non-PPR formula computed
@@ -68,12 +79,15 @@ where favorites reset on restart.
 Live scores auto-refresh every 20 seconds while a game is in progress,
 same cadence as the Flutter app, and stop once the game goes final.
 
-In the team picker (`a`): `b`/`c`/`f`/`n` jump straight to baseball,
-college football, (NFL) football, or basketball, and `p` switches to a
-live NFL player search for the Fantasy page; groups start collapsed and
-`enter` expands one (or follows/unfollows a team or player); `escape`
-asks you to confirm (y/n) before exiting, listing everything you're
-following.
+In the team picker (`a`): one scrollable list covers every sport —
+MLB, then NCAAF, then NFL, then NBA, each broken into
+league/conference → division → team, plus a pinned "FANTASY" entry at
+the top that opens a dedicated NFL player search screen (back button
+or `escape` returns to the team list). Typing in the search box matches
+team name/city across all four sports at once. Division groups start
+collapsed; `enter` expands one, follows/unfollows a team, or opens
+Fantasy. `escape` on the team list asks you to confirm (y/n) before
+exiting, listing everything you're following.
 
 ## Project layout
 
@@ -93,7 +107,8 @@ sportspages_tui/
 ├── config.py               # favorites + fantasy-player persistence (~/.config/sportspages-tui/)
 ├── date_format.py          # short (body) vs full (masthead) date formatting
 ├── screens/
-│   ├── team_picker.py      # 4-sport + fantasy-player picker, with search
+│   ├── team_picker.py      # one MLB/NCAAF/NFL/NBA team tree, with cross-sport search
+│   ├── fantasy_picker.py   # separate NFL player search screen, reached from the picker
 │   └── help.py             # keybinding reference overlay
 └── app.tcss                 # styling
 ```

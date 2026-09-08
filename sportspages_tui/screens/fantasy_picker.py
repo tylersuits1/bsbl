@@ -25,7 +25,25 @@ _SEARCH_PLACEHOLDER = "Search NFL players by name"
 class FantasyPickerScreen(Screen):
     BINDINGS = [
         Binding("escape", "go_back", "Back"),
+        # This screen is pushed on top of the team picker, so it's the
+        # only screen the app's key-binding chain sees while it's open —
+        # the team picker's own shadow bindings underneath don't apply.
+        # Without these, letters like 'b'/'p' would leak straight
+        # through to the app's Batting/Pause-Live actions on the hidden
+        # page beneath both pickers. 'q' (Quit) is deliberately left
+        # unshadowed — quitting from here is fine.
+        Binding("s", "noop", show=False),
+        Binding("b", "noop", show=False),
+        Binding("l", "noop", show=False),
+        Binding("r", "noop", show=False),
+        Binding("a", "noop", show=False),
+        Binding("p", "noop", show=False),
+        Binding("d", "noop", show=False),
+        Binding("question_mark", "noop", show=False),
     ]
+
+    def action_noop(self) -> None:
+        pass
 
     def __init__(self) -> None:
         super().__init__()
