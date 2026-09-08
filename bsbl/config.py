@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".config" / "sportspages-tui"
+CONFIG_DIR = Path.home() / ".config" / "bsbl"
 FAVORITES_FILE = CONFIG_DIR / "favorites.json"
 
 MAX_FAVORITES = 8

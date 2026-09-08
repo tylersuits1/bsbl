@@ -1,8 +1,8 @@
-from .app import SportsPagesApp
+from .app import BsblApp
 
 
 def run() -> None:
-    SportsPagesApp().run()
+    BsblApp().run()
 
 
 if __name__ == "__main__":

@@ -13,17 +13,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from textual.widgets import ListView
 
-from sportspages_tui import config
-from sportspages_tui.app import SportsPagesApp
-from sportspages_tui.screens.player_picker import PlayerPickerScreen
-from sportspages_tui.screens.team_picker import TeamPickerScreen
+from bsbl import config
+from bsbl.app import BsblApp
+from bsbl.screens.player_picker import PlayerPickerScreen
+from bsbl.screens.team_picker import TeamPickerScreen
 
 
 async def main() -> None:
     config.save_favorites([])
     config.save_players([])
 
-    app = SportsPagesApp()
+    app = BsblApp()
     async with app.run_test(size=(100, 45)) as pilot:
         await pilot.pause(1)
         # No favorites at all -> the picker opens automatically.

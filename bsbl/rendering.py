@@ -173,7 +173,7 @@ def refresh_status_line(last_updated, paused: bool) -> Text:
 
 
 def masthead(team_name: str, record: str, today: str, *, page: int, total_pages: int) -> Group:
-    date_line = Align.center(Text(f"THE SPORTS PAGES · {today}", style="dim"))
+    date_line = Align.center(Text(f"BSBL · {today}", style="dim"))
     name_line = Align.center(Text(team_name.upper(), style="bold"))
     page_text = f"Page {page}/{total_pages}"
     below_name = Text.assemble((record, "dim")) if record else Text()

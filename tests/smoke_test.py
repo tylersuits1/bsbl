@@ -11,15 +11,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from textual.widgets import Input, ListView
 
-from sportspages_tui import config
-from sportspages_tui.app import SportsPagesApp
-from sportspages_tui.screens.team_picker import TeamPickerScreen
+from bsbl import config
+from bsbl.app import BsblApp
+from bsbl.screens.team_picker import TeamPickerScreen
 
 
 async def main() -> None:
     config.save_favorites([("MLB", "ATL"), ("MLB", "MIL")])
 
-    app = SportsPagesApp()
+    app = BsblApp()
     async with app.run_test(size=(100, 55)) as pilot:
         await pilot.pause(3)
         print("=== Initial team ===", app.current_team.full_name)

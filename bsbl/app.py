@@ -1,7 +1,7 @@
-"""SportsPages TUI — a newspaper-styled terminal client for following
-MLB games, in the spirit of Newsboat: launch into a scrollable page for
-your followed teams, arrow left/right between them, arrow up/down
-through the news, single-letter hotkeys for everything else.
+"""bsbl — a newspaper-styled terminal client for following MLB games,
+in the spirit of Newsboat: launch into a scrollable page for your
+followed teams, arrow left/right between them, arrow up/down through
+the news, single-letter hotkeys for everything else.
 """
 
 from __future__ import annotations
@@ -219,9 +219,9 @@ class MainScreen(VerticalScroll):
         headline_list.focus()
 
 
-class SportsPagesApp(App):
+class BsblApp(App):
     CSS_PATH = "app.tcss"
-    TITLE = "The Sports Pages"
+    TITLE = "bsbl"
 
     BINDINGS = [
         ("left", "prev_team", "Prev Team"),

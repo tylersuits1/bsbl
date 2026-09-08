@@ -4,13 +4,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sportspages_tui import config
-from sportspages_tui.app import SportsPagesApp
+from bsbl import config
+from bsbl.app import BsblApp
 
 
 async def main() -> None:
     config.save_favorites([("MLB", "ATL"), ("MLB", "MIL")])
-    app = SportsPagesApp()
+    app = BsblApp()
     async with app.run_test(size=(100, 45)) as pilot:
         await pilot.pause(4)
         svg = app.export_screenshot()
