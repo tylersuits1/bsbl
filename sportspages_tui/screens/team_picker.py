@@ -2,9 +2,13 @@
 league/conference > division, with search scoped to whichever sport tab
 is active. 'b' jumps to baseball (MLB), 'c' to college football
 (NCAAF), 'f' to (NFL) football, 'n' to basketball (NBA), 'p' to a live
-NFL player search for fantasy tracking. Reached on first launch (no
-favorites yet) or via the 'a' hotkey. Groups start collapsed so
-browsing isn't one long scroll; Escape asks for a y/n confirmation
+NFL player search for fantasy tracking — these lowercase keys only fire
+when the team list is focused (the search box needs every lowercase
+letter as literal query text). Shift+ the same letter (B/C/F/N/P) does
+the same switch but works even while typing in the search box, so you
+never have to click off it just to change sport. Reached on first
+launch (no favorites yet) or via the 'a' hotkey. Groups start collapsed
+so browsing isn't one long scroll; Escape asks for a y/n confirmation
 before handing control back to the app.
 """
 
@@ -12,10 +16,11 @@ from __future__ import annotations
 
 import asyncio
 
-from textual import on, work
+from textual import events, on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
+from textual.message import Message
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Input, ListItem, ListView, Static
 
@@ -36,6 +41,32 @@ _SPORT_LABELS = {"MLB": "MLB", "NCAAF": "NCAAF", "NFL": "NFL", "NBA": "NBA", "FA
 _SEARCH_PLACEHOLDER = "Search teams, or leave blank to browse"
 _FANTASY_PLACEHOLDER = "Search NFL players by name"
 
+_SHIFT_SWITCH_SPORTS = {"B": "MLB", "C": "NCAAF", "F": "NFL", "N": "NBA", "P": "FANTASY"}
+
+
+class SportSearchInput(Input):
+    """The picker's search box. `Input._on_key` normally consumes every
+    printable character itself (inserting it and stopping the event)
+    before Textual's bindings system ever sees it — including capital
+    letters — so a plain Binding on "B"/"C"/etc, even with
+    priority=True, never fires while this has focus. Intercepting here,
+    at the one place that actually owns the keystroke, is what makes
+    Shift+<letter> switch sport without leaving the search box.
+    """
+
+    class ShiftSwitch(Message):
+        def __init__(self, letter: str) -> None:
+            self.letter = letter
+            super().__init__()
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.character in _SHIFT_SWITCH_SPORTS:
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.ShiftSwitch(event.character))
+            return
+        await super()._on_key(event)
+
 
 class TeamPickerScreen(Screen):
     BINDINGS = [
@@ -46,6 +77,11 @@ class TeamPickerScreen(Screen):
         Binding("p", "show_fantasy", "Fantasy"),
         Binding("y", "confirm_yes", "Confirm"),
         Binding("n", "confirm_no", "Basketball / Cancel"),
+        # Shift+letter mirrors of the sport-switch keys above (Shift+B
+        # for baseball, etc.) work even while the search box has focus —
+        # handled by SportSearchInput.ShiftSwitch below, since Input
+        # consumes every printable character itself before any Binding,
+        # even a priority one, gets a chance to see it.
         # Shadow the main app's remaining global hotkeys so they don't
         # leak into this screen's footer, or silently mutate the hidden
         # page behind it (e.g. pressing 's' here toggling its stats panel).
@@ -75,7 +111,7 @@ class TeamPickerScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Static(id="picker-title")
         with Horizontal(id="search-row"):
-            yield Input(placeholder=_SEARCH_PLACEHOLDER, id="search")
+            yield SportSearchInput(placeholder=_SEARCH_PLACEHOLDER, id="search")
             yield Button("✕", id="clear-search")
         with VerticalScroll(id="picker-body"):
             yield ListView(id="team-list")
@@ -109,7 +145,7 @@ class TeamPickerScreen(Screen):
     def _update_title(self) -> None:
         self.query_one("#picker-title", Static).update(
             f"[bold]FOLLOW A TEAM — {_SPORT_LABELS[self._sport]}[/bold]  "
-            "[dim](b baseball · c college · f NFL · n NBA · p fantasy)[/dim]"
+            "[dim](b/c/f/n/p, or ⇧B ⇧C ⇧F ⇧N ⇧P while searching)[/dim]"
         )
 
     def _groups_for_sport(self, sport: str) -> list[tuple[str, str, list]]:
@@ -297,17 +333,33 @@ class TeamPickerScreen(Screen):
     def action_show_fantasy(self) -> None:
         self._switch_sport("FANTASY")
 
-    def _switch_sport(self, sport: str) -> None:
+    @on(SportSearchInput.ShiftSwitch)
+    def on_shift_switch(self, message: SportSearchInput.ShiftSwitch) -> None:
+        # Shift+<letter> — same switch as the plain keys above, but
+        # keeps whatever's already typed and re-searches it under the
+        # new sport instead of clearing it, since this fires without
+        # ever taking focus off the search box.
+        sport = _SHIFT_SWITCH_SPORTS.get(message.letter)
+        if sport:
+            self._switch_sport(sport, keep_query=True)
+
+    def _switch_sport(self, sport: str, *, keep_query: bool = False) -> None:
         if self._confirming or self._sport == sport:
             return
         self._sport = sport
-        self._query = ""
-        self._fantasy_results = []
         search = self.query_one("#search", Input)
-        search.value = ""
         search.placeholder = _FANTASY_PLACEHOLDER if sport == "FANTASY" else _SEARCH_PLACEHOLDER
         self._update_title()
-        self._refresh_list()
+
+        if not keep_query:
+            self._query = ""
+            search.value = ""
+
+        self._fantasy_results = []
+        if sport == "FANTASY" and self._query:
+            self._search_fantasy_players(self._query)
+        else:
+            self._refresh_list()
 
     def action_request_exit(self) -> None:
         if self._confirming:

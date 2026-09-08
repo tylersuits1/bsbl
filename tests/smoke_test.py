@@ -154,6 +154,24 @@ async def main() -> None:
         print("=== Search value after clear ===", repr(search.value))
         assert search.value == ""
 
+        # Shift+<letter> switches sport WITHOUT leaving the search box —
+        # unlike the plain keys above, it works while typing, and keeps
+        # the query so it re-searches under the new sport.
+        search.focus()
+        await pilot.pause(0.1)
+        await pilot.press(*"card")
+        await pilot.press("C")
+        await pilot.pause(0.3)
+        print("=== Picker sport after Shift+C while typing ===", picker._sport, "query kept:", repr(search.value))
+        assert picker._sport == "NCAAF"
+        assert search.value == "card"
+        assert app.focused is search
+        await pilot.press("B")
+        await pilot.pause(0.2)
+        assert picker._sport == "MLB" and search.value == "card"
+        await pilot.click("#clear-search")
+        await pilot.pause(0.2)
+
         await pilot.press("escape")
         await pilot.pause(0.2)
         print("=== Picker confirming ===", picker._confirming)
