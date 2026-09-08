@@ -19,6 +19,7 @@ from .models import (
     Headline,
     LineScore,
     NextGameInfo,
+    PlayerSearchResult,
     PlayerStat,
     TeamSide,
 )
@@ -73,6 +74,54 @@ def _record_string(league_record: dict | None) -> str:
 def _last_name(full_name: str) -> str:
     parts = [p for p in full_name.strip().split(" ") if p]
     return parts[-1] if parts else full_name
+
+
+def _player_stat_from_person(person: dict, *, name: str | None = None, position: str | None = None) -> PlayerStat:
+    """Shared by the roster-stats fetch (per team) and the single-player
+    fetch (for a followed player not tied to a currently-followed team):
+    both hydrate a person with the same stats(type=season,group=[hitting,
+    pitching]) shape and need the same hitting-vs-pitching selection.
+    `name`/`position` override the person's own fields when the caller
+    already has a more reliable value (e.g. from a search result).
+    """
+    name = name or person.get("fullName", "Unknown")
+    position = position if position is not None else (person.get("primaryPosition") or {}).get("abbreviation", "")
+    is_pitcher = position == "P"
+    person_stats = person.get("stats", [])
+
+    pitching_stat = hitting_stat = None
+    for s in person_stats:
+        group = (s.get("group") or {}).get("displayName")
+        splits = s.get("splits", [])
+        if not splits:
+            continue
+        stat = splits[0].get("stat", {})
+        if group == "pitching":
+            pitching_stat = stat
+        elif group == "hitting":
+            hitting_stat = stat
+
+    # Pitchers occasionally carry a placeholder hitting line (NL pitchers
+    # batting) alongside real pitching stats — prefer whichever matches
+    # the player's primary position.
+    stat = (pitching_stat or hitting_stat) if is_pitcher else (hitting_stat or pitching_stat)
+    stat_is_pitching = pitching_stat is not None if is_pitcher else (hitting_stat is None and pitching_stat is not None)
+
+    if stat is None:
+        return PlayerStat(name=name, position=position, is_pitcher=is_pitcher, has_stats=False)
+    if stat_is_pitching:
+        return PlayerStat(
+            name=name, position=position, is_pitcher=True,
+            wins_losses=f"{stat.get('wins', 0)}-{stat.get('losses', 0)}",
+            era=stat.get("era", "-.--"),
+            innings_pitched=stat.get("inningsPitched", "0.0"),
+        )
+    return PlayerStat(
+        name=name, position=position, is_pitcher=False,
+        avg=stat.get("avg", ".---"),
+        home_runs=stat.get("homeRuns", 0),
+        rbi=stat.get("rbi", 0),
+    )
 
 
 class MlbStatsService:
@@ -132,51 +181,49 @@ class MlbStatsService:
         data = await self._get_json(url)
         roster = data.get("roster", [])
 
-        stats: list[PlayerStat] = []
-        for entry in roster:
-            person = entry["person"]
-            name = person.get("fullName", "Unknown")
-            position = (person.get("primaryPosition") or {}).get("abbreviation", "")
-            is_pitcher = position == "P"
-            person_stats = person.get("stats", [])
-
-            pitching_stat = hitting_stat = None
-            for s in person_stats:
-                group = (s.get("group") or {}).get("displayName")
-                splits = s.get("splits", [])
-                if not splits:
-                    continue
-                stat = splits[0].get("stat", {})
-                if group == "pitching":
-                    pitching_stat = stat
-                elif group == "hitting":
-                    hitting_stat = stat
-
-            # Pitchers occasionally carry a placeholder hitting line (NL
-            # pitchers batting) alongside real pitching stats — prefer
-            # whichever matches the player's primary position.
-            stat = (pitching_stat or hitting_stat) if is_pitcher else (hitting_stat or pitching_stat)
-            stat_is_pitching = pitching_stat is not None if is_pitcher else (hitting_stat is None and pitching_stat is not None)
-
-            if stat is None:
-                stats.append(PlayerStat(name=name, position=position, is_pitcher=is_pitcher, has_stats=False))
-            elif stat_is_pitching:
-                stats.append(PlayerStat(
-                    name=name, position=position, is_pitcher=True,
-                    wins_losses=f"{stat.get('wins', 0)}-{stat.get('losses', 0)}",
-                    era=stat.get("era", "-.--"),
-                    innings_pitched=stat.get("inningsPitched", "0.0"),
-                ))
-            else:
-                stats.append(PlayerStat(
-                    name=name, position=position, is_pitcher=False,
-                    avg=stat.get("avg", ".---"),
-                    home_runs=stat.get("homeRuns", 0),
-                    rbi=stat.get("rbi", 0),
-                ))
-
+        stats = [_player_stat_from_person(entry["person"]) for entry in roster]
         stats.sort(key=lambda p: p.name)
         return stats
+
+    async def search_players(self, query: str) -> list[PlayerSearchResult]:
+        """Active players matching `query` by name — used by the player
+        picker. MLB Stats API's search already returns position and
+        current team, so no follow-up fetch is needed just to list
+        results (unlike a per-player stats lookup, which does need one).
+        """
+        # currentTeam isn't included by default here (unlike the single-
+        # person endpoint) — has to be hydrated explicitly.
+        data = await self._get_json(f"{STATS_BASE}/people/search?names={query}&hydrate=currentTeam")
+        results = []
+        for person in data.get("people", []):
+            if not person.get("isPlayer") or not person.get("active"):
+                continue
+            team_data = person.get("currentTeam") or {}
+            team_info = mlb_teams.team_by_id(team_data["id"]) if team_data.get("id") else None
+            if team_info is None:
+                # Not on a current MLB active roster (minor-leaguer, free
+                # agent, etc.) — out of scope for an MLB-follow feature.
+                continue
+            results.append(PlayerSearchResult(
+                person_id=person["id"],
+                name=person.get("fullName", "Unknown"),
+                position=(person.get("primaryPosition") or {}).get("abbreviation", ""),
+                team_abbr=team_info.abbreviation,
+            ))
+        return results
+
+    async def fetch_player_stat(self, person_id: int, name: str, position: str) -> PlayerStat:
+        """Season stats for one arbitrary followed player (not
+        necessarily looked up via a team roster) — used by the aggregate
+        Players page.
+        """
+        data = await self._get_json(
+            f"{STATS_BASE}/people/{person_id}?hydrate=stats(type=season,group=[hitting,pitching])"
+        )
+        people = data.get("people", [])
+        if not people:
+            return PlayerStat(name=name, position=position, is_pitcher=position == "P", has_stats=False)
+        return _player_stat_from_person(people[0], name=name, position=position)
 
     async def _parse_live_feed(
         self,

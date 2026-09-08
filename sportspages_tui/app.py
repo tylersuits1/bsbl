@@ -9,6 +9,7 @@ from __future__ import annotations
 import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Union
 
 import httpx
 from rich.console import Group
@@ -38,11 +39,25 @@ from .screens.team_picker import TeamPickerScreen
 LIVE_REFRESH_SECONDS = 20
 
 
+class _PlayersSentinel:
+    """Stands in for a "team" for the one aggregate Players page — there's
+    no single team behind it, just whichever players you're tracking.
+    """
+
+    abbreviation = "PLAYERS"
+    full_name = "Players"
+
+
+_PLAYERS_SENTINEL = _PlayersSentinel()
+
+
 @dataclass
 class FollowedTeam:
-    """One entry in the followed-teams list."""
+    """One entry in the followed-teams list — an MLB team, or the one
+    aggregate Players page.
+    """
 
-    info: mlb_teams.TeamInfo
+    info: Union[mlb_teams.TeamInfo, _PlayersSentinel]
 
     @property
     def abbreviation(self) -> str:
@@ -52,11 +67,16 @@ class FollowedTeam:
     def full_name(self) -> str:
         return self.info.full_name
 
+    @property
+    def is_players_page(self) -> bool:
+        return isinstance(self.info, _PlayersSentinel)
+
 
 class HeadlineItem(ListItem):
-    def __init__(self, headline: Headline) -> None:
+    def __init__(self, headline: Headline, *, label: str | None = None) -> None:
+        title = f"{label}: {headline.title}" if label else headline.title
         body = Group(
-            f"[bold]{headline.title}[/bold]",
+            f"[bold]{title}[/bold]",
             f"[italic dim]{headline.byline} | {headline.time_ago}[/italic dim]",
         )
         super().__init__(Static(body))
@@ -98,6 +118,8 @@ class MainScreen(VerticalScroll):
         page: int,
         total_pages: int,
     ) -> None:
+        self._show_batting_stats_sections()
+
         today = format_full_date(datetime.now())
         self.query_one("#masthead", Static).update(
             masthead(team.full_name, box.followed_team_record, today, page=page, total_pages=total_pages)
@@ -131,6 +153,60 @@ class MainScreen(VerticalScroll):
             stats_widget.update("[bold]STATS (+s)[/bold]")
 
         self._render_headlines(headlines)
+
+    def render_players_page(
+        self,
+        stats: list[PlayerStat],
+        player_headlines: list[tuple[str, Headline]],
+        *,
+        last_updated: datetime | None,
+        paused: bool,
+        page: int,
+        total_pages: int,
+    ) -> None:
+        """The one aggregate page for every tracked player — unlike every
+        other page, this isn't one team's box score, so the batting/stats
+        sections (not applicable here) are hidden rather than repurposed.
+        """
+        today = format_full_date(datetime.now())
+        self.query_one("#masthead", Static).update(
+            masthead("Players", "", today, page=page, total_pages=total_pages)
+        )
+
+        count_line = (
+            f"Tracking {len(stats)} player{'s' if len(stats) != 1 else ''}"
+            if stats else "No players tracked yet — press 'a' then select PLAYERS to search"
+        )
+        lines = [count_line, "", refresh_status_line(last_updated, paused)]
+        self.query_one("#summary", Static).update(Group(*lines))
+
+        hitters = [s for s in stats if not s.is_pitcher]
+        pitchers = [s for s in stats if s.is_pitcher]
+        parts = []
+        if hitters:
+            parts += [player_stats_table(stats, pitchers=False), ""]
+        if pitchers:
+            parts += [player_stats_table(stats, pitchers=True), ""]
+        self.query_one("#innings", Static).update(Group(*parts) if parts else "")
+
+        self.query_one("#batting-section", Static).display = False
+        self.query_one("#stats-section", Static).display = False
+
+        headline_list = self.query_one("#headlines-list", ListView)
+        headline_list.clear()
+        if player_headlines:
+            for name, headline in player_headlines:
+                headline_list.append(HeadlineItem(headline, label=name))
+        else:
+            headline_list.append(ListItem(Static("[italic dim]No headlines available.[/italic dim]"), disabled=True))
+        headline_list.focus()
+
+    def _show_batting_stats_sections(self) -> None:
+        """The Players page hides these (not applicable); every other
+        page needs them visible again after a visit to Players.
+        """
+        self.query_one("#batting-section", Static).display = True
+        self.query_one("#stats-section", Static).display = True
 
     def _render_headlines(self, headlines: list[Headline]) -> None:
         headline_list = self.query_one("#headlines-list", ListView)
@@ -197,6 +273,8 @@ class SportsPagesApp(App):
             t = mlb_teams.team_by_abbreviation(abbr)
             if t:
                 teams.append(FollowedTeam(t))
+        if config.load_players():
+            teams.append(FollowedTeam(_PLAYERS_SENTINEL))
         self.teams = teams
         if self.current_index >= len(self.teams):
             self.current_index = max(0, len(self.teams) - 1)
@@ -226,6 +304,9 @@ class SportsPagesApp(App):
         followed = self.current_team
         if not followed or not self._body:
             return
+        if followed.is_players_page:
+            await self._load_players_page()
+            return
         team = followed.info
         try:
             box = await self.stats_service.fetch_game_for_team(team)
@@ -246,6 +327,38 @@ class SportsPagesApp(App):
         )
         if box.status.value == "FINAL" and self._live_timer:
             self._live_timer.pause()
+
+    async def _load_players_page(self) -> None:
+        players = config.load_players()
+        stats: list[PlayerStat] = []
+        player_headlines: list[tuple[str, Headline]] = []
+        for player in players:
+            person_id = player.get("player_id")
+            name = player.get("name", "?")
+            position = player.get("position", "")
+            try:
+                stat = await self.stats_service.fetch_player_stat(person_id, name, position)
+            except MlbStatsError:
+                stat = PlayerStat(name=name, position=position, is_pitcher=position == "P", has_stats=False)
+            stats.append(stat)
+
+            headline = await self._fetch_player_headline(name)
+            if headline:
+                player_headlines.append((name, headline))
+
+        self.last_updated = datetime.now().astimezone()
+        self._body.render_players_page(
+            stats, player_headlines,
+            last_updated=self.last_updated, paused=self.live_paused,
+            page=self.current_index + 1, total_pages=len(self.teams),
+        )
+
+    async def _fetch_player_headline(self, name: str) -> Headline | None:
+        if not name:
+            return None
+        web_headlines = await self._fetch_web_headlines(f"{name} MLB")
+        merged = merge_headlines([web_headlines])
+        return merged[0] if merged else None
 
     async def _fetch_web_headlines(self, query: str) -> list[Headline]:
         """Google News + Bing News RSS, scoped to this team — plain

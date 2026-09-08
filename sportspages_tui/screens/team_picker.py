@@ -14,6 +14,7 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Input, ListItem, ListView, Static
 
 from .. import config, mlb_teams
+from .player_picker import PlayerPickerScreen
 
 _DIVISIONS = ("East", "Central", "West")
 
@@ -100,6 +101,10 @@ class TeamPickerScreen(Screen):
                 list_view.index = 0
             return
 
+        players_item = ListItem(Static("[bold]PLAYERS[/bold] — search & follow MLB players"))
+        players_item.data = ("player_open",)
+        list_view.append(players_item)
+
         for key, label, teams in self._groups():
             self._append_group(list_view, key, label, teams, favorites)
 
@@ -156,6 +161,8 @@ class TeamPickerScreen(Screen):
             if not applied:
                 self.notify(f"You can follow up to {config.MAX_FAVORITES} teams", severity="warning")
             self._refresh_list()
+        elif kind == "player_open":
+            self.app.push_screen(PlayerPickerScreen())
 
     def action_request_exit(self) -> None:
         if self._confirming:
@@ -171,6 +178,8 @@ class TeamPickerScreen(Screen):
                 continue
             team = mlb_teams.team_by_abbreviation(abbr)
             names.append(team.full_name if team else f"MLB:{abbr}")
+        for player in config.load_players():
+            names.append(f"{player.get('name', '?')} (Player)")
         listing = "\n".join(f"  • {n}" for n in names) if names else "  (no teams followed yet)"
         text = (
             "[bold]Exit team picker with these teams?[/bold]\n\n"

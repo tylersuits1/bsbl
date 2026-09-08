@@ -1,6 +1,6 @@
-"""Favorite-team persistence. Unlike the Flutter app (favorites are
-in-memory only, lost on restart), the TUI writes to a small JSON file so
-what you're following survives between sessions.
+"""Favorite-team (and followed-player) persistence. Unlike the Flutter
+app (favorites are in-memory only, lost on restart), the TUI writes to a
+small JSON file so what you're following survives between sessions.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ CONFIG_DIR = Path.home() / ".config" / "sportspages-tui"
 FAVORITES_FILE = CONFIG_DIR / "favorites.json"
 
 MAX_FAVORITES = 8
+MAX_PLAYERS = 15
 
 
 def _read_data() -> dict:
@@ -68,4 +69,34 @@ def toggle_favorite(sport: str, abbreviation: str) -> tuple[list[tuple[str, str]
         return current, False
     current.append(key)
     save_favorites(current)
+    return current, True
+
+
+def load_players() -> list[dict]:
+    """Each entry: {"player_id": int, "name": str, "position": str,
+    "team_abbr": str}.
+    """
+    return _read_data().get("players", [])
+
+
+def save_players(players: list[dict]) -> None:
+    data = _read_data()
+    data["players"] = players
+    _write_data(data)
+
+
+def toggle_player(player: dict) -> tuple[list[dict], bool]:
+    """`player` must include "player_id". Returns (updated list,
+    applied) — applied=False if adding would exceed MAX_PLAYERS.
+    """
+    current = load_players()
+    existing_index = next((i for i, p in enumerate(current) if p.get("player_id") == player.get("player_id")), None)
+    if existing_index is not None:
+        current.pop(existing_index)
+        save_players(current)
+        return current, True
+    if len(current) >= MAX_PLAYERS:
+        return current, False
+    current.append(player)
+    save_players(current)
     return current, True

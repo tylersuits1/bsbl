@@ -69,6 +69,16 @@ Screen {
     padding: 1 2;
 }
 
+#picker-header {
+    height: 3;
+    padding: 1 2 0 2;
+}
+
+#back-button {
+    width: 12;
+    min-width: 12;
+}
+
 #search-row {
     height: 3;
     margin: 0 2 1 2;

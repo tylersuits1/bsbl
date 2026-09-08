@@ -49,6 +49,14 @@ class NextGameInfo:
 
 
 @dataclass
+class PlayerSearchResult:
+    person_id: int
+    name: str
+    position: str
+    team_abbr: str
+
+
+@dataclass
 class PlayerStat:
     name: str
     position: str
