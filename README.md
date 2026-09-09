@@ -37,6 +37,8 @@ their whole team.
 brew install tylersuits1/bsbl/bsbl
 ```
 
+(the formula lives in this repo, at [`Formula/bsbl.rb`](Formula/bsbl.rb) — no separate tap repo)
+
 **From source:**
 
 ```bash
