@@ -1,5 +1,9 @@
 # bsbl
 
+<p align="center">
+  <img src="assets/icon.png" alt="bsbl icon" width="120">
+</p>
+
 A newspaper-styled terminal UI for following MLB games and players, in
 the tradition of tools like Newsboat: launch it, swipe left/right
 between your teams, scroll up/down through the news, single-letter
