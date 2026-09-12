@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from rich.align import Align
 from rich.console import Group
+from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
@@ -114,24 +115,55 @@ def live_at_bat_section(box: BoxScore) -> Table | None:
     return layout
 
 
-def bases_diamond(box: BoxScore) -> Table:
-    """A bases-diamond diagram — 2nd at top, 3rd at left, 1st at right,
-    home at the bottom — with a filled dot for any base a runner
-    currently occupies.
-    """
-    def glyph(on: bool) -> Text:
-        return Text("●", style="bold green") if on else Text("◇", style="dim")
+_DIAMOND_WIDTH = 17
+_DIAMOND_HEIGHT = 9
+_CENTER_COL = _DIAMOND_WIDTH // 2   # 8
+_MID_ROW = _DIAMOND_HEIGHT // 2     # 4
 
-    grid = Table.grid(padding=0)
-    grid.add_column(justify="right", width=10)
-    grid.add_column(justify="center", width=6)
-    grid.add_column(justify="left", width=10)
-    grid.add_row("", glyph(box.second_occupied), "")
-    grid.add_row("", "", "")
-    grid.add_row(glyph(box.third_occupied), "", glyph(box.first_occupied))
-    grid.add_row("", "", "")
-    grid.add_row("", Text("⌂", style="dim"), "")
-    return grid
+
+def bases_diamond(box: BoxScore) -> Panel:
+    """A bases-diamond diagram, boxed in its own panel — 2nd at the top
+    vertex, 3rd at left, 1st at right, home at the bottom, connected by
+    diagonal lines, with a filled dot for any base a runner currently
+    occupies.
+    """
+    def glyph(on: bool) -> tuple[str, str]:
+        return ("●", "bold green") if on else ("◇", "dim")
+
+    second_ch, second_style = glyph(box.second_occupied)
+    third_ch, third_style = glyph(box.third_occupied)
+    first_ch, first_style = glyph(box.first_occupied)
+
+    rows = []
+    for r in range(_DIAMOND_HEIGHT):
+        chars = [" "] * _DIAMOND_WIDTH
+        text = Text(style="dim")
+
+        if r == 0:
+            chars[_CENTER_COL] = second_ch
+        elif r == _MID_ROW:
+            chars[0] = third_ch
+            chars[_DIAMOND_WIDTH - 1] = first_ch
+        elif r == _DIAMOND_HEIGHT - 1:
+            chars[_CENTER_COL] = "⌂"
+        elif r < _MID_ROW:
+            offset = r * 2
+            chars[_CENTER_COL - offset] = "╱"
+            chars[_CENTER_COL + offset] = "╲"
+        else:
+            offset = (_DIAMOND_HEIGHT - 1 - r) * 2
+            chars[_CENTER_COL - offset] = "╲"
+            chars[_CENTER_COL + offset] = "╱"
+
+        text.append("".join(chars))
+        if r == 0:
+            text.stylize(second_style, _CENTER_COL, _CENTER_COL + 1)
+        elif r == _MID_ROW:
+            text.stylize(third_style, 0, 1)
+            text.stylize(first_style, _DIAMOND_WIDTH - 1, _DIAMOND_WIDTH)
+        rows.append(text)
+
+    return Panel(Group(*rows), box=_box_style(), padding=(0, 1), expand=False)
 
 
 def inning_table(box: BoxScore) -> Table:
