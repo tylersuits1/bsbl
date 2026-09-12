@@ -78,10 +78,10 @@ def detail_lines(box: BoxScore) -> list[str]:
     return lines
 
 
-def live_at_bat_section(box: BoxScore) -> Group | None:
-    """Current batter/pitcher, ball-strike count, outs, and a small bases
-    diamond — only meaningful (and only shown) while a game is actually
-    in progress.
+def live_at_bat_section(box: BoxScore) -> Table | None:
+    """Current batter/pitcher, ball-strike count, and outs on the left,
+    with a bases diamond alongside on the right — only meaningful (and
+    only shown) while a game is actually in progress.
     """
     if box.status not in (GameStatus.LIVE, GameStatus.DELAYED):
         return None
@@ -102,29 +102,34 @@ def live_at_bat_section(box: BoxScore) -> Group | None:
     count.append(str(box.outs), style="bold")
     count.append(" OUT" if box.outs == 1 else " OUTS", style="dim")
 
-    parts = []
+    info_parts = []
     if matchup.plain:
-        parts.append(matchup)
-    parts.append(count)
-    parts.append("")
-    parts.append(bases_diamond(box))
-    return Group(*parts)
+        info_parts.append(matchup)
+    info_parts.append(count)
+
+    layout = Table.grid(padding=(0, 4, 0, 0))
+    layout.add_column()
+    layout.add_column()
+    layout.add_row(Group(*info_parts), bases_diamond(box))
+    return layout
 
 
 def bases_diamond(box: BoxScore) -> Table:
-    """A small ASCII infield diamond — 2nd at top, 3rd at left, 1st at
-    right, home at the bottom — with a filled dot for any base a runner
+    """A bases-diamond diagram — 2nd at top, 3rd at left, 1st at right,
+    home at the bottom — with a filled dot for any base a runner
     currently occupies.
     """
     def glyph(on: bool) -> Text:
         return Text("●", style="bold green") if on else Text("◇", style="dim")
 
     grid = Table.grid(padding=0)
-    grid.add_column(justify="right", width=7)
-    grid.add_column(justify="center", width=3)
-    grid.add_column(justify="left", width=7)
+    grid.add_column(justify="right", width=10)
+    grid.add_column(justify="center", width=6)
+    grid.add_column(justify="left", width=10)
     grid.add_row("", glyph(box.second_occupied), "")
+    grid.add_row("", "", "")
     grid.add_row(glyph(box.third_occupied), "", glyph(box.first_occupied))
+    grid.add_row("", "", "")
     grid.add_row("", Text("⌂", style="dim"), "")
     return grid
 
@@ -223,8 +228,9 @@ def refresh_status_line(last_updated, paused: bool) -> Text:
     return line
 
 
-def masthead(team_name: str, record: str, today: str, *, page: int, total_pages: int) -> Group:
-    date_line = Align.center(Text(f"BSBL · {today}", style="dim"))
+def masthead(team_name: str, record: str, today: str, *, page: int, total_pages: int, version: str = "") -> Group:
+    bsbl_label = f"BSBL v{version}" if version else "BSBL"
+    date_line = Align.center(Text(f"{bsbl_label} · {today}", style="dim"))
     name_line = Align.center(Text(team_name.upper(), style="bold"))
     page_text = f"Page {page}/{total_pages}"
     below_name = Text.assemble((record, "dim")) if record else Text()

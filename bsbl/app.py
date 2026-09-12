@@ -19,7 +19,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import ListItem, ListView, Static
 
-from . import config, mlb_teams
+from . import __version__, config, mlb_teams
 from .date_format import format_full_date
 from .mlb_api import MlbStatsError, MlbStatsService, headlines_for_team
 from .models import BoxScore, Headline, PlayerStat
@@ -129,7 +129,10 @@ class MainScreen(VerticalScroll):
 
         today = format_full_date(datetime.now())
         self.query_one("#masthead", Static).update(
-            masthead(team.full_name, box.followed_team_record, today, page=page, total_pages=total_pages)
+            masthead(
+                team.full_name, box.followed_team_record, today,
+                page=page, total_pages=total_pages, version=__version__,
+            )
         )
 
         lines = [matchup_line(box), status_line(box)]
@@ -181,7 +184,7 @@ class MainScreen(VerticalScroll):
         """
         today = format_full_date(datetime.now())
         self.query_one("#masthead", Static).update(
-            masthead("Players", "", today, page=page, total_pages=total_pages)
+            masthead("Players", "", today, page=page, total_pages=total_pages, version=__version__)
         )
 
         count_line = (
