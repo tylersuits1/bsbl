@@ -5,7 +5,7 @@ class Bsbl < Formula
   homepage "https://github.com/tylersuits1/bsbl"
   url "https://github.com/tylersuits1/bsbl.git",
       tag:      "v0.4.0",
-      revision: "b1e02b33069866dea6511ab02e6d1e82122d3300"
+      revision: "34155bd3a9bea10ce86fdecf880698473907ace4"
   license "MIT"
 
   depends_on "python@3.12"
