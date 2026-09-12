@@ -1,6 +1,6 @@
 [project]
 name = "bsbl"
-version = "0.3.0"
+version = "0.4.0"
 description = "A newspaper-styled terminal UI for following MLB games, in the spirit of Newsboat."
 license = "MIT"
 requires-python = ">=3.10"
