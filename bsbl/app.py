@@ -39,7 +39,7 @@ from .rendering import (
 from .screens.help import HelpScreen
 from .screens.team_picker import TeamPickerScreen
 
-LIVE_REFRESH_SECONDS = 20
+LIVE_REFRESH_SECONDS = 15
 
 
 class _PlayersSentinel:
@@ -102,7 +102,7 @@ class MainScreen(VerticalScroll):
         super().__init__(id="body-scroll")
         self.show_stats = False       # player stats (s)
         self.show_batting = False     # batting order (b)
-        self.show_headlines = True    # headlines (h)
+        self.show_headlines = False   # headlines (h)
 
     def compose(self) -> ComposeResult:
         yield Static(id="masthead")

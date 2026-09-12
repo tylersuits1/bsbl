@@ -30,7 +30,13 @@ async def main() -> None:
         assert app.current_index == 0 and len(app.teams) == 2
 
         headline_list = app.screen.query_one("#headlines-list", ListView)
-        print("=== Headline items in list ===", len(headline_list))
+        print("=== Headlines collapsed on open ===", not app._body.show_headlines, "| display:", headline_list.display)
+        assert app._body.show_headlines is False
+        assert headline_list.display is False
+
+        await pilot.press("h")
+        await pilot.pause(0.5)
+        print("=== Headline items after 'h' ===", len(headline_list))
         assert len(headline_list) >= 1
 
         await pilot.press("right")

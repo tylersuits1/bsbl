@@ -79,7 +79,7 @@ directly. Your followed teams and players persist between runs in
 | `?`     | Help screen                        |
 | `q`     | Quit                                |
 
-Live scores auto-refresh every 20 seconds while a game is in progress,
+Live scores auto-refresh every 15 seconds while a game is in progress,
 and stop once the game goes final.
 
 In the team picker (`a`): browse by league → division, or type to
