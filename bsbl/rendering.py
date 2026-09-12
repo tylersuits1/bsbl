@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from rich.align import Align
 from rich.console import Group
-from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
@@ -29,8 +28,16 @@ def status_text(status: GameStatus) -> Text:
     return Text(status.value, style=_STATUS_STYLE.get(status, "bold"))
 
 
+_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+
+
 def last_name(full_name: str) -> str:
+    """The last "real" name token — skips generational suffixes like
+    "Jr." or "III" so e.g. "Ronald Acuña Jr." shows as "Acuña", not "Jr.".
+    """
     parts = [p for p in full_name.strip().split(" ") if p]
+    while len(parts) > 1 and parts[-1].lower().rstrip(".") in _NAME_SUFFIXES:
+        parts.pop()
     return parts[-1] if parts else full_name
 
 
@@ -69,6 +76,9 @@ def detail_lines(box: BoxScore) -> list[str]:
             f"Pitching: {last_name(box.away_pitcher)} ({box.away.abbreviation}) {box.away_pitcher_ip}  |  "
             f"{last_name(box.home_pitcher)} ({box.home.abbreviation}) {box.home_pitcher_ip}"
         )
+        runners = bases_line(box)
+        if runners is not None:
+            lines.append(runners)
 
     if box.status == GameStatus.FINAL and box.next_game:
         ng = box.next_game
@@ -79,10 +89,28 @@ def detail_lines(box: BoxScore) -> list[str]:
     return lines
 
 
-def live_at_bat_section(box: BoxScore) -> Table | None:
-    """Current batter/pitcher, ball-strike count, and outs on the left,
-    with a bases diamond alongside on the right — only meaningful (and
-    only shown) while a game is actually in progress.
+def bases_line(box: BoxScore) -> str | None:
+    """'Bases loaded', or 'Ozzie on first, Acuña on second' listing
+    whoever's actually on base — omitted entirely when the bases are
+    empty, or the game isn't live.
+    """
+    if box.status not in (GameStatus.LIVE, GameStatus.DELAYED):
+        return None
+    if box.on_first and box.on_second and box.on_third:
+        return "Bases loaded"
+    parts = []
+    if box.on_first:
+        parts.append(f"{last_name(box.on_first)} on first")
+    if box.on_second:
+        parts.append(f"{last_name(box.on_second)} on second")
+    if box.on_third:
+        parts.append(f"{last_name(box.on_third)} on third")
+    return ", ".join(parts) if parts else None
+
+
+def live_at_bat_section(box: BoxScore) -> Group | None:
+    """Current batter/pitcher plus ball-strike count and outs — only
+    shown while a game is actually in progress.
     """
     if box.status not in (GameStatus.LIVE, GameStatus.DELAYED):
         return None
@@ -103,67 +131,11 @@ def live_at_bat_section(box: BoxScore) -> Table | None:
     count.append(str(box.outs), style="bold")
     count.append(" OUT" if box.outs == 1 else " OUTS", style="dim")
 
-    info_parts = []
+    parts = []
     if matchup.plain:
-        info_parts.append(matchup)
-    info_parts.append(count)
-
-    layout = Table.grid(padding=(0, 4, 0, 0))
-    layout.add_column()
-    layout.add_column()
-    layout.add_row(Group(*info_parts), bases_diamond(box))
-    return layout
-
-
-_DIAMOND_WIDTH = 17
-_DIAMOND_HEIGHT = 9
-_CENTER_COL = _DIAMOND_WIDTH // 2   # 8
-_MID_ROW = _DIAMOND_HEIGHT // 2     # 4
-
-
-def bases_diamond(box: BoxScore) -> Panel:
-    """A bases-diamond diagram, boxed in its own panel — 2nd at the top
-    vertex, 3rd at left, 1st at right, home at the bottom, connected by
-    diagonal lines, with a filled dot for any base a runner currently
-    occupies.
-    """
-    def glyph(on: bool) -> tuple[str, str]:
-        return ("●", "bold green") if on else ("◇", "dim")
-
-    second_ch, second_style = glyph(box.second_occupied)
-    third_ch, third_style = glyph(box.third_occupied)
-    first_ch, first_style = glyph(box.first_occupied)
-
-    rows = []
-    for r in range(_DIAMOND_HEIGHT):
-        chars = [" "] * _DIAMOND_WIDTH
-        text = Text(style="dim")
-
-        if r == 0:
-            chars[_CENTER_COL] = second_ch
-        elif r == _MID_ROW:
-            chars[0] = third_ch
-            chars[_DIAMOND_WIDTH - 1] = first_ch
-        elif r == _DIAMOND_HEIGHT - 1:
-            chars[_CENTER_COL] = "⌂"
-        elif r < _MID_ROW:
-            offset = r * 2
-            chars[_CENTER_COL - offset] = "╱"
-            chars[_CENTER_COL + offset] = "╲"
-        else:
-            offset = (_DIAMOND_HEIGHT - 1 - r) * 2
-            chars[_CENTER_COL - offset] = "╲"
-            chars[_CENTER_COL + offset] = "╱"
-
-        text.append("".join(chars))
-        if r == 0:
-            text.stylize(second_style, _CENTER_COL, _CENTER_COL + 1)
-        elif r == _MID_ROW:
-            text.stylize(third_style, 0, 1)
-            text.stylize(first_style, _DIAMOND_WIDTH - 1, _DIAMOND_WIDTH)
-        rows.append(text)
-
-    return Panel(Group(*rows), box=_box_style(), padding=(0, 1), expand=False)
+        parts.append(matchup)
+    parts.append(count)
+    return Group(*parts)
 
 
 def inning_table(box: BoxScore) -> Table:

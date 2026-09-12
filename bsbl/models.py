@@ -106,6 +106,6 @@ class BoxScore:
     outs: int = 0
     at_bat_batter: str = ""
     at_bat_pitcher: str = ""
-    first_occupied: bool = False
-    second_occupied: bool = False
-    third_occupied: bool = False
+    on_first: str = ""
+    on_second: str = ""
+    on_third: str = ""

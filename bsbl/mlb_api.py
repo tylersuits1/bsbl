@@ -290,15 +290,15 @@ class MlbStatsService:
         followed_team_record = home_record if followed_is_home else away_record
 
         at_bat_batter = at_bat_pitcher = ""
-        first_occupied = second_occupied = third_occupied = False
+        on_first = on_second = on_third = ""
         if status in (GameStatus.LIVE, GameStatus.DELAYED):
             offense = linescore.get("offense") or {}
             defense = linescore.get("defense") or {}
             at_bat_batter = (offense.get("batter") or {}).get("fullName", "")
             at_bat_pitcher = (defense.get("pitcher") or {}).get("fullName", "")
-            first_occupied = bool(offense.get("first"))
-            second_occupied = bool(offense.get("second"))
-            third_occupied = bool(offense.get("third"))
+            on_first = (offense.get("first") or {}).get("fullName", "")
+            on_second = (offense.get("second") or {}).get("fullName", "")
+            on_third = (offense.get("third") or {}).get("fullName", "")
 
         return BoxScore(
             home=home, away=away, home_line=home_line, away_line=away_line,
@@ -312,7 +312,7 @@ class MlbStatsService:
             followed_team_record=followed_team_record,
             balls=linescore.get("balls", 0), strikes=linescore.get("strikes", 0), outs=linescore.get("outs", 0),
             at_bat_batter=at_bat_batter, at_bat_pitcher=at_bat_pitcher,
-            first_occupied=first_occupied, second_occupied=second_occupied, third_occupied=third_occupied,
+            on_first=on_first, on_second=on_second, on_third=on_third,
         )
 
     def _line_score_from(self, totals: dict | None) -> LineScore:
