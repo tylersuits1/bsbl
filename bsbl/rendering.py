@@ -58,16 +58,20 @@ def status_line(box: BoxScore) -> Text:
     return line
 
 
-def detail_lines(box: BoxScore) -> list[str]:
-    lines = []
+def location_weather_line(box: BoxScore) -> str | None:
     parts = []
     if box.venue:
         parts.append(box.venue)
     if box.weather:
         parts.append(box.weather)
-    if parts:
-        lines.append("  |  ".join(parts))
+    return "  |  ".join(parts) if parts else None
 
+
+def pitching_lines(box: BoxScore) -> list[str]:
+    """The season/box-score pitching line — shown under the box score,
+    not alongside the live at-bat state (see live_at_bat_section).
+    """
+    lines = []
     if box.status in (GameStatus.SCHEDULED, GameStatus.WARMUP):
         if box.away_pitcher and box.home_pitcher:
             lines.append(f"Probable Pitchers: {last_name(box.away_pitcher)} vs {last_name(box.home_pitcher)}")
@@ -76,9 +80,6 @@ def detail_lines(box: BoxScore) -> list[str]:
             f"Pitching: {last_name(box.away_pitcher)} ({box.away.abbreviation}) {box.away_pitcher_ip}  |  "
             f"{last_name(box.home_pitcher)} ({box.home.abbreviation}) {box.home_pitcher_ip}"
         )
-        runners = bases_line(box)
-        if runners is not None:
-            lines.append(runners)
 
     if box.status == GameStatus.FINAL and box.next_game:
         ng = box.next_game
@@ -89,13 +90,10 @@ def detail_lines(box: BoxScore) -> list[str]:
     return lines
 
 
-def bases_line(box: BoxScore) -> str | None:
-    """'Bases loaded', or 'Ozzie on first, Acuña on second' listing
-    whoever's actually on base — omitted entirely when the bases are
-    empty, or the game isn't live.
+def bases_line(box: BoxScore) -> str:
+    """'Bases empty', 'Bases loaded', or 'Ozzie on first, Acuña on
+    second' listing whoever's actually on base.
     """
-    if box.status not in (GameStatus.LIVE, GameStatus.DELAYED):
-        return None
     if box.on_first and box.on_second and box.on_third:
         return "Bases loaded"
     parts = []
@@ -105,12 +103,12 @@ def bases_line(box: BoxScore) -> str | None:
         parts.append(f"{last_name(box.on_second)} on second")
     if box.on_third:
         parts.append(f"{last_name(box.on_third)} on third")
-    return ", ".join(parts) if parts else None
+    return ", ".join(parts) if parts else "Bases empty"
 
 
 def live_at_bat_section(box: BoxScore) -> Group | None:
-    """Current batter/pitcher plus ball-strike count and outs — only
-    shown while a game is actually in progress.
+    """Current batter/pitcher, ball-strike count and outs, and who's on
+    base — only shown while a game is actually in progress.
     """
     if box.status not in (GameStatus.LIVE, GameStatus.DELAYED):
         return None
@@ -135,6 +133,7 @@ def live_at_bat_section(box: BoxScore) -> Group | None:
     if matchup.plain:
         parts.append(matchup)
     parts.append(count)
+    parts.append(bases_line(box))
     return Group(*parts)
 
 

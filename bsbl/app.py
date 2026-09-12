@@ -26,11 +26,12 @@ from .models import BoxScore, Headline, PlayerStat
 from .news_sources import fetch_bing_news, fetch_google_news, merge_headlines
 from .rendering import (
     batting_order_columns,
-    detail_lines,
     inning_table,
     live_at_bat_section,
+    location_weather_line,
     masthead,
     matchup_line,
+    pitching_lines,
     player_stats_table,
     refresh_status_line,
     status_line,
@@ -136,13 +137,16 @@ class MainScreen(VerticalScroll):
         )
 
         lines = [matchup_line(box), status_line(box)]
+        loc_weather = location_weather_line(box)
+        if loc_weather is not None:
+            lines.append(loc_weather)
         live_section = live_at_bat_section(box)
         if live_section is not None:
             lines += ["", live_section]
-        lines += [*detail_lines(box), "", refresh_status_line(last_updated, paused)]
+        lines += ["", refresh_status_line(last_updated, paused)]
         self.query_one("#summary", Static).update(Group(*lines))
 
-        self.query_one("#innings", Static).update(inning_table(box))
+        self.query_one("#innings", Static).update(Group(inning_table(box), "", *pitching_lines(box)))
 
         # Batting/Stats headers are always shown — even collapsed — so the
         # page makes clear these sections exist above the headlines,
