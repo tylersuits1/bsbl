@@ -66,11 +66,6 @@ async def main() -> None:
         print("=== After 'p' — live_paused ===", app.live_paused)
         assert app.live_paused is True
 
-        await pilot.press("d")
-        await pilot.pause(0.5)
-        print("=== After 'd' — theme ===", app.theme)
-        assert app.theme == "ansi-light"
-
         # -- team picker: collapsible division groups, search, search
         # clear, escape confirmation --
         await pilot.press("a")

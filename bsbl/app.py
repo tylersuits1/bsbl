@@ -249,7 +249,6 @@ class BsblApp(App):
         ("r", "refresh_now", "Refresh"),
         ("a", "manage_teams", "Follow"),
         ("p", "toggle_live", "Pause Live"),
-        ("d", "toggle_dark", "Theme"),
         ("question_mark", "show_help", "Help"),
         ("q", "quit", "Quit"),
     ]
@@ -419,7 +418,7 @@ class BsblApp(App):
 
     def _update_hints(self) -> None:
         # Only the hotkeys someone reaches for constantly. Stats (s),
-        # Batting (b), Follow (a), Theme (d) and Pause Live (p) still
+        # Batting (b), Headlines (h), Follow (a) and Pause Live (p) still
         # work exactly as before — they're documented in the '?' help
         # screen instead of taking up space here every time.
         parts = [
@@ -488,9 +487,6 @@ class BsblApp(App):
     def action_toggle_live(self) -> None:
         self.live_paused = not self.live_paused
         self.load_current_team()
-
-    def action_toggle_dark(self) -> None:
-        self.theme = "ansi-light" if self.theme == "ansi-dark" else "ansi-dark"
 
     async def action_show_help(self) -> None:
         await self.push_screen(HelpScreen())

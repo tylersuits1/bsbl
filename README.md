@@ -76,7 +76,6 @@ directly. Your followed teams and players persist between runs in
 | `r`     | Refresh now                        |
 | `a`     | Follow / unfollow teams or players |
 | `p`     | Pause / resume live auto-refresh   |
-| `d`     | Toggle dark / light theme          |
 | `?`     | Help screen                        |
 | `q`     | Quit                                |
 

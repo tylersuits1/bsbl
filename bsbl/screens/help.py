@@ -17,7 +17,6 @@ _KEYS = [
     ("r", "Refresh now"),
     ("a", "Follow / unfollow teams — search or browse by division"),
     ("p", "Pause / resume live auto-refresh"),
-    ("d", "Toggle dark / light theme"),
     ("?", "This help screen"),
     ("q", "Quit"),
 ]
