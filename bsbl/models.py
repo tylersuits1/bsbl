@@ -57,6 +57,24 @@ class PlayerSearchResult:
 
 
 @dataclass
+class ScoringPlay:
+    inning: int
+    is_top: bool
+    batter: str
+    event: str
+    scorers: list[str]
+    away_score: int
+    home_score: int
+
+
+@dataclass
+class ScoringPlaysResult:
+    away_abbr: str
+    home_abbr: str
+    plays: list[ScoringPlay]
+
+
+@dataclass
 class PlayerStat:
     name: str
     position: str

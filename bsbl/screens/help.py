@@ -17,6 +17,7 @@ _KEYS = [
     ("r", "Refresh now"),
     ("a", "Follow / unfollow teams — search or browse by division"),
     ("p", "Pause / resume live auto-refresh"),
+    ("z", "Scoring plays recap for this game"),
     ("?", "This help screen"),
     ("q", "Quit"),
 ]

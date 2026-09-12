@@ -69,6 +69,17 @@ Screen {
     padding: 1 2;
 }
 
+#scoring-plays-title {
+    text-style: bold;
+    padding: 1 2;
+}
+
+#scoring-plays-body {
+    height: 1fr;
+    padding: 0 2 1 2;
+    scrollbar-size-vertical: 1;
+}
+
 #picker-header {
     height: 3;
     padding: 1 2 0 2;

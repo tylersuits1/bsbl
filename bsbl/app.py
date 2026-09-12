@@ -37,6 +37,7 @@ from .rendering import (
     status_line,
 )
 from .screens.help import HelpScreen
+from .screens.scoring_plays import ScoringPlaysScreen
 from .screens.team_picker import TeamPickerScreen
 
 LIVE_REFRESH_SECONDS = 15
@@ -258,6 +259,7 @@ class BsblApp(App):
         ("r", "refresh_now", "Refresh"),
         ("a", "manage_teams", "Follow"),
         ("p", "toggle_live", "Pause Live"),
+        ("z", "show_scoring_plays", "Scoring Plays"),
         ("question_mark", "show_help", "Help"),
         ("q", "quit", "Quit"),
     ]
@@ -496,6 +498,21 @@ class BsblApp(App):
     def action_toggle_live(self) -> None:
         self.live_paused = not self.live_paused
         self.load_current_team()
+
+    async def action_show_scoring_plays(self) -> None:
+        followed = self.current_team
+        if not followed:
+            return
+        if followed.is_players_page:
+            self.notify("Scoring plays aren't available on the Players page", severity="warning")
+            return
+        team = followed.info
+        try:
+            result = await self.stats_service.fetch_scoring_plays(team)
+        except MlbStatsError as e:
+            self.notify(f"Could not load scoring plays: {e}", severity="error")
+            return
+        await self.push_screen(ScoringPlaysScreen(team.full_name, result))
 
     async def action_show_help(self) -> None:
         await self.push_screen(HelpScreen())

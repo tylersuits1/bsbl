@@ -21,6 +21,8 @@ from .models import (
     NextGameInfo,
     PlayerSearchResult,
     PlayerStat,
+    ScoringPlay,
+    ScoringPlaysResult,
     TeamSide,
 )
 
@@ -169,6 +171,55 @@ class MlbStatsService:
             away_record=away_record,
             home_record=home_record,
         )
+
+    async def fetch_scoring_plays(self, team: mlb_teams.TeamInfo) -> ScoringPlaysResult | None:
+        """Every play that put a run on the board in today's game for
+        `team`, for the scoring-plays recap screen. None if there's no
+        game today.
+        """
+        today_json = await self._get_json(
+            f"{STATS_BASE}/schedule?sportId=1&teamId={team.stats_api_id}"
+            f"&date={_fmt_date(current_baseball_date())}"
+        )
+        games = self._games_from_schedule(today_json)
+        if not games:
+            return None
+
+        game_pk = games[0]["gamePk"]
+        live_json = await self._get_json(f"{STATS_LIVE_BASE}/game/{game_pk}/feed/live")
+        return self._parse_scoring_plays(live_json)
+
+    def _parse_scoring_plays(self, live: dict) -> ScoringPlaysResult:
+        teams_data = live["gameData"]["teams"]
+        away_abbr = teams_data["away"].get("abbreviation", "")
+        home_abbr = teams_data["home"].get("abbreviation", "")
+
+        plays_data = live["liveData"].get("plays", {})
+        all_plays = plays_data.get("allPlays", [])
+
+        plays = []
+        for idx in plays_data.get("scoringPlays", []):
+            if idx >= len(all_plays):
+                continue
+            play = all_plays[idx]
+            about = play.get("about") or {}
+            result = play.get("result") or {}
+            matchup = play.get("matchup") or {}
+            scorers = [
+                (r.get("details") or {}).get("runner", {}).get("fullName", "")
+                for r in play.get("runners", [])
+                if (r.get("movement") or {}).get("end") == "score"
+            ]
+            plays.append(ScoringPlay(
+                inning=about.get("inning", 0),
+                is_top=bool(about.get("isTopInning", True)),
+                batter=(matchup.get("batter") or {}).get("fullName", ""),
+                event=result.get("event", ""),
+                scorers=[s for s in scorers if s],
+                away_score=result.get("awayScore", 0),
+                home_score=result.get("homeScore", 0),
+            ))
+        return ScoringPlaysResult(away_abbr=away_abbr, home_abbr=home_abbr, plays=plays)
 
     async def fetch_player_stats(self, team: mlb_teams.TeamInfo) -> list[PlayerStat]:
         """Season batting (AVG/HR/RBI) or pitching (W-L/ERA/IP) for every

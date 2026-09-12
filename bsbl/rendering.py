@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .date_format import format_clock_time, format_short_datetime, ordinal_inning
-from .models import BoxScore, GameStatus, PlayerStat
+from .models import BoxScore, GameStatus, PlayerStat, ScoringPlaysResult
 
 _STATUS_STYLE = {
     GameStatus.LIVE: "bold red",
@@ -174,6 +174,30 @@ def live_at_bat_section(box: BoxScore) -> Group | None:
     parts.append(count)
     parts.append(bases_line(box))
     return Group(*parts)
+
+
+def scoring_plays_lines(result: ScoringPlaysResult) -> list:
+    """'1ST INNING' header, then '<batter> | <event> - <scorers> scored'
+    and the score after that play, for every play that put a run on the
+    board — grouped under one heading per inning.
+    """
+    if not result.plays:
+        return ["No scoring plays yet."]
+
+    lines: list = []
+    last_inning = None
+    for play in result.plays:
+        if play.inning != last_inning:
+            if lines:
+                lines.append("")
+            lines.append(Text(f"{ordinal_inning(play.inning)} Inning".upper(), style="bold"))
+            last_inning = play.inning
+
+        scorers = ", ".join(last_name(s) for s in play.scorers) if play.scorers else last_name(play.batter)
+        lines.append(f"{last_name(play.batter)} | {play.event} - {scorers} scored")
+        lines.append(f"{result.away_abbr} {play.away_score} - {result.home_abbr} {play.home_score}")
+
+    return lines
 
 
 def inning_table(box: BoxScore) -> Table:

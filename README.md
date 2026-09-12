@@ -76,6 +76,7 @@ directly. Your followed teams and players persist between runs in
 | `r`     | Refresh now                        |
 | `a`     | Follow / unfollow teams or players |
 | `p`     | Pause / resume live auto-refresh   |
+| `z`     | Scoring plays recap for this game  |
 | `?`     | Help screen                        |
 | `q`     | Quit                                |
 
@@ -105,6 +106,7 @@ bsbl/
 ├── screens/
 │   ├── team_picker.py      # MLB team picker: browse by division, or search; pinned entry into Players
 │   ├── player_picker.py    # individual player search/follow screen
+│   ├── scoring_plays.py    # scoring-plays recap for the current game
 │   └── help.py             # keybinding reference overlay
 └── app.tcss                 # styling
 ```
