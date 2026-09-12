@@ -143,10 +143,12 @@ class MainScreen(VerticalScroll):
         live_section = live_at_bat_section(box)
         if live_section is not None:
             lines += ["", live_section]
-        lines += ["", refresh_status_line(last_updated, paused)]
+        lines += ["", *pitching_lines(box)]
         self.query_one("#summary", Static).update(Group(*lines))
 
-        self.query_one("#innings", Static).update(Group(inning_table(box), "", *pitching_lines(box)))
+        self.query_one("#innings", Static).update(
+            Group(inning_table(box), "", refresh_status_line(last_updated, paused))
+        )
 
         # Batting/Stats headers are always shown — even collapsed — so the
         # page makes clear these sections exist above the headlines,

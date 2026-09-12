@@ -124,7 +124,8 @@ _PITCH_RESULT_LABELS = {
 
 
 def last_pitch_line(box: BoxScore) -> Text | None:
-    """'Curveball | Strike' — the most recent pitch of the at-bat in
+    """'Curveball | Strike', or 'Slider | In Play - Double' when the
+    pitch was put in play — the most recent pitch of the at-bat in
     progress, blank once a new batter steps in before the first pitch.
     """
     if not box.last_pitch_type:
@@ -134,6 +135,9 @@ def last_pitch_line(box: BoxScore) -> Text | None:
         result = _PITCH_RESULT_LABELS.get(box.last_pitch_result.lower(), box.last_pitch_result)
         line.append(" | ", style="dim")
         line.append(result, style="dim")
+        if box.last_pitch_outcome:
+            line.append(" - ", style="dim")
+            line.append(box.last_pitch_outcome, style="dim")
     return line
 
 
