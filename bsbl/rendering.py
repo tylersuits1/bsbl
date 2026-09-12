@@ -106,9 +106,41 @@ def bases_line(box: BoxScore) -> str:
     return ", ".join(parts) if parts else "Bases empty"
 
 
+_PITCH_RESULT_LABELS = {
+    "ball": "Ball",
+    "called strike": "Strike",
+    "swinging strike": "Swing",
+    "swinging strike (blocked)": "Swing",
+    "foul": "Foul",
+    "foul tip": "Foul",
+    "foul bunt": "Foul",
+    "missed bunt": "Missed Bunt",
+    "hit by pitch": "Hit By Pitch",
+    "pitchout": "Pitchout",
+    "in play, no out": "In Play",
+    "in play, out(s)": "In Play",
+    "in play, run(s)": "In Play",
+}
+
+
+def last_pitch_line(box: BoxScore) -> Text | None:
+    """'Curveball | Strike' — the most recent pitch of the at-bat in
+    progress, blank once a new batter steps in before the first pitch.
+    """
+    if not box.last_pitch_type:
+        return None
+    line = Text(box.last_pitch_type, style="dim")
+    if box.last_pitch_result:
+        result = _PITCH_RESULT_LABELS.get(box.last_pitch_result.lower(), box.last_pitch_result)
+        line.append(" | ", style="dim")
+        line.append(result, style="dim")
+    return line
+
+
 def live_at_bat_section(box: BoxScore) -> Group | None:
-    """Current batter/pitcher, ball-strike count and outs, and who's on
-    base — only shown while a game is actually in progress.
+    """Current batter/pitcher, the last pitch thrown, ball-strike count
+    and outs, and who's on base — only shown while a game is actually
+    in progress.
     """
     if box.status not in (GameStatus.LIVE, GameStatus.DELAYED):
         return None
@@ -119,7 +151,7 @@ def live_at_bat_section(box: BoxScore) -> Group | None:
         matchup.append(last_name(box.at_bat_batter))
     if box.at_bat_pitcher:
         if box.at_bat_batter:
-            matchup.append("   ")
+            matchup.append(" | ", style="dim")
         matchup.append("PITCHING ", style="bold")
         matchup.append(last_name(box.at_bat_pitcher))
 
@@ -132,6 +164,9 @@ def live_at_bat_section(box: BoxScore) -> Group | None:
     parts = []
     if matchup.plain:
         parts.append(matchup)
+    pitch_line = last_pitch_line(box)
+    if pitch_line is not None:
+        parts.append(pitch_line)
     parts.append(count)
     parts.append(bases_line(box))
     return Group(*parts)

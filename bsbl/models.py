@@ -109,3 +109,5 @@ class BoxScore:
     on_first: str = ""
     on_second: str = ""
     on_third: str = ""
+    last_pitch_type: str = ""
+    last_pitch_result: str = ""

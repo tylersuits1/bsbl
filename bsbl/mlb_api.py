@@ -291,6 +291,7 @@ class MlbStatsService:
 
         at_bat_batter = at_bat_pitcher = ""
         on_first = on_second = on_third = ""
+        last_pitch_type = last_pitch_result = ""
         if status in (GameStatus.LIVE, GameStatus.DELAYED):
             offense = linescore.get("offense") or {}
             defense = linescore.get("defense") or {}
@@ -299,6 +300,7 @@ class MlbStatsService:
             on_first = (offense.get("first") or {}).get("fullName", "")
             on_second = (offense.get("second") or {}).get("fullName", "")
             on_third = (offense.get("third") or {}).get("fullName", "")
+            last_pitch_type, last_pitch_result = self._last_pitch(live_data)
 
         return BoxScore(
             home=home, away=away, home_line=home_line, away_line=away_line,
@@ -313,7 +315,23 @@ class MlbStatsService:
             balls=linescore.get("balls", 0), strikes=linescore.get("strikes", 0), outs=linescore.get("outs", 0),
             at_bat_batter=at_bat_batter, at_bat_pitcher=at_bat_pitcher,
             on_first=on_first, on_second=on_second, on_third=on_third,
+            last_pitch_type=last_pitch_type, last_pitch_result=last_pitch_result,
         )
+
+    def _last_pitch(self, live_data: dict) -> tuple[str, str]:
+        """Type and result of the most recent pitch of the at-bat in
+        progress — e.g. ("Curveball", "Called Strike") — blank once a
+        new batter steps in before the first pitch, since currentPlay
+        resets to an empty playEvents list at that point.
+        """
+        current_play = (live_data.get("plays") or {}).get("currentPlay") or {}
+        pitches = [e for e in current_play.get("playEvents", []) if e.get("isPitch")]
+        if not pitches:
+            return "", ""
+        details = pitches[-1].get("details") or {}
+        pitch_type = (details.get("type") or {}).get("description", "")
+        result = details.get("description", "")
+        return pitch_type, result
 
     def _line_score_from(self, totals: dict | None) -> LineScore:
         totals = totals or {}
