@@ -4,8 +4,8 @@ class Bsbl < Formula
   desc "Newspaper-styled terminal UI for MLB scores and players"
   homepage "https://github.com/tylersuits1/bsbl"
   url "https://github.com/tylersuits1/bsbl.git",
-      tag:      "v0.3.0",
-      revision: "1ef2fb98f404c3b3f5aff4ad434d9e449796d64d"
+      tag:      "v0.4.0",
+      revision: "6a8e14e6595fe072649b68a4f88f11f8e04fd83d"
   license "MIT"
 
   depends_on "python@3.12"
