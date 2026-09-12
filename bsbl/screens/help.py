@@ -13,6 +13,7 @@ _KEYS = [
     ("enter", "Open the highlighted headline in your browser"),
     ("s", "Toggle player stats"),
     ("b", "Toggle batting order"),
+    ("h", "Toggle headlines"),
     ("r", "Refresh now"),
     ("a", "Follow / unfollow teams — search or browse by division"),
     ("p", "Pause / resume live auto-refresh"),

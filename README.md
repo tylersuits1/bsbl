@@ -31,7 +31,9 @@ MLB only. Masthead, live score, inning-by-inning box score, batting
 order, and season player stats for however many teams you follow, plus
 an aggregate page for individually followed players (season stats and
 one headline each) — for tracking a specific player without pulling in
-their whole team.
+their whole team. While a game is live: current batter/pitcher,
+ball-strike count, out count, and a bases diamond showing who's on
+base.
 
 ## Install
 
@@ -70,6 +72,7 @@ directly. Your followed teams and players persist between runs in
 | ↑ / ↓   | Scroll headlines / page content    |
 | `s`     | Toggle player stats                |
 | `b`     | Toggle batting order               |
+| `h`     | Toggle headlines                   |
 | `r`     | Refresh now                        |
 | `a`     | Follow / unfollow teams or players |
 | `p`     | Pause / resume live auto-refresh   |

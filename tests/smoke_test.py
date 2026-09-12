@@ -18,6 +18,7 @@ from bsbl.screens.team_picker import TeamPickerScreen
 
 async def main() -> None:
     config.save_favorites([("MLB", "ATL"), ("MLB", "MIL")])
+    config.save_players([])
 
     app = BsblApp()
     async with app.run_test(size=(100, 55)) as pilot:
@@ -110,6 +111,7 @@ async def main() -> None:
         assert len(app.screen_stack) == 1
 
     config.save_favorites([])
+    config.save_players([])
     print("\nSMOKE TEST PASSED — no crashes, all assertions held")
 
 

@@ -78,6 +78,57 @@ def detail_lines(box: BoxScore) -> list[str]:
     return lines
 
 
+def live_at_bat_section(box: BoxScore) -> Group | None:
+    """Current batter/pitcher, ball-strike count, outs, and a small bases
+    diamond — only meaningful (and only shown) while a game is actually
+    in progress.
+    """
+    if box.status not in (GameStatus.LIVE, GameStatus.DELAYED):
+        return None
+
+    matchup = Text()
+    if box.at_bat_batter:
+        matchup.append("AT BAT ", style="bold")
+        matchup.append(last_name(box.at_bat_batter))
+    if box.at_bat_pitcher:
+        if box.at_bat_batter:
+            matchup.append("   ")
+        matchup.append("PITCHING ", style="bold")
+        matchup.append(last_name(box.at_bat_pitcher))
+
+    count = Text()
+    count.append(f"{box.balls}-{box.strikes}", style="bold")
+    count.append(" COUNT   ", style="dim")
+    count.append(str(box.outs), style="bold")
+    count.append(" OUT" if box.outs == 1 else " OUTS", style="dim")
+
+    parts = []
+    if matchup.plain:
+        parts.append(matchup)
+    parts.append(count)
+    parts.append("")
+    parts.append(bases_diamond(box))
+    return Group(*parts)
+
+
+def bases_diamond(box: BoxScore) -> Table:
+    """A small ASCII infield diamond — 2nd at top, 3rd at left, 1st at
+    right, home at the bottom — with a filled dot for any base a runner
+    currently occupies.
+    """
+    def glyph(on: bool) -> Text:
+        return Text("●", style="bold green") if on else Text("◇", style="dim")
+
+    grid = Table.grid(padding=0)
+    grid.add_column(justify="right", width=7)
+    grid.add_column(justify="center", width=3)
+    grid.add_column(justify="left", width=7)
+    grid.add_row("", glyph(box.second_occupied), "")
+    grid.add_row(glyph(box.third_occupied), "", glyph(box.first_occupied))
+    grid.add_row("", Text("⌂", style="dim"), "")
+    return grid
+
+
 def inning_table(box: BoxScore) -> Table:
     inning_count = max(len(box.away_innings), len(box.home_innings), 9)
     table = Table(show_header=True, header_style="bold", box=_box_style(), pad_edge=False)

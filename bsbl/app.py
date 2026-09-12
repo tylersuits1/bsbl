@@ -6,6 +6,7 @@ the news, single-letter hotkeys for everything else.
 
 from __future__ import annotations
 
+import asyncio
 import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,6 +28,7 @@ from .rendering import (
     batting_order_columns,
     detail_lines,
     inning_table,
+    live_at_bat_section,
     masthead,
     matchup_line,
     player_stats_table,
@@ -49,6 +51,10 @@ class _PlayersSentinel:
 
 
 _PLAYERS_SENTINEL = _PlayersSentinel()
+
+
+async def _no_stats() -> list[PlayerStat]:
+    return []
 
 
 @dataclass
@@ -93,8 +99,9 @@ class MainScreen(VerticalScroll):
 
     def __init__(self) -> None:
         super().__init__(id="body-scroll")
-        self.show_stats = False    # player stats (s)
-        self.show_batting = False  # batting order (b)
+        self.show_stats = False       # player stats (s)
+        self.show_batting = False     # batting order (b)
+        self.show_headlines = True    # headlines (h)
 
     def compose(self) -> ComposeResult:
         yield Static(id="masthead")
@@ -125,7 +132,11 @@ class MainScreen(VerticalScroll):
             masthead(team.full_name, box.followed_team_record, today, page=page, total_pages=total_pages)
         )
 
-        lines = [matchup_line(box), status_line(box), *detail_lines(box), "", refresh_status_line(last_updated, paused)]
+        lines = [matchup_line(box), status_line(box)]
+        live_section = live_at_bat_section(box)
+        if live_section is not None:
+            lines += ["", live_section]
+        lines += [*detail_lines(box), "", refresh_status_line(last_updated, paused)]
         self.query_one("#summary", Static).update(Group(*lines))
 
         self.query_one("#innings", Static).update(inning_table(box))
@@ -192,14 +203,7 @@ class MainScreen(VerticalScroll):
         self.query_one("#batting-section", Static).display = False
         self.query_one("#stats-section", Static).display = False
 
-        headline_list = self.query_one("#headlines-list", ListView)
-        headline_list.clear()
-        if player_headlines:
-            for name, headline in player_headlines:
-                headline_list.append(HeadlineItem(headline, label=name))
-        else:
-            headline_list.append(ListItem(Static("[italic dim]No headlines available.[/italic dim]"), disabled=True))
-        headline_list.focus()
+        self._render_headline_items([HeadlineItem(headline, label=name) for name, headline in player_headlines])
 
     def _show_batting_stats_sections(self) -> None:
         """The Players page hides these (not applicable); every other
@@ -209,11 +213,22 @@ class MainScreen(VerticalScroll):
         self.query_one("#stats-section", Static).display = True
 
     def _render_headlines(self, headlines: list[Headline]) -> None:
+        self._render_headline_items([HeadlineItem(h) for h in headlines[:5]])
+
+    def _render_headline_items(self, items: list[ListItem]) -> None:
+        title = self.query_one("#headlines-title", Static)
         headline_list = self.query_one("#headlines-list", ListView)
+        if not self.show_headlines:
+            title.update("[bold]HEADLINES (+h)[/bold]")
+            headline_list.display = False
+            return
+
+        title.update("[bold]HEADLINES (-h)[/bold]")
+        headline_list.display = True
         headline_list.clear()
-        if headlines:
-            for h in headlines[:5]:
-                headline_list.append(HeadlineItem(h))
+        if items:
+            for item in items:
+                headline_list.append(item)
         else:
             headline_list.append(ListItem(Static("[italic dim]No headlines available.[/italic dim]"), disabled=True))
         headline_list.focus()
@@ -230,6 +245,7 @@ class BsblApp(App):
         ("down", "scroll_down", "Scroll Down"),
         ("s", "toggle_stats", "Stats"),
         ("b", "toggle_batting", "Batting"),
+        ("h", "toggle_headlines", "Headlines"),
         ("r", "refresh_now", "Refresh"),
         ("a", "manage_teams", "Follow"),
         ("p", "toggle_live", "Pause Live"),
@@ -245,6 +261,8 @@ class BsblApp(App):
         self.current_index = 0
         self.teams: list[FollowedTeam] = []
         self.last_updated: datetime | None = None
+        self._cached_headlines: list[Headline] = []
+        self._cached_player_headlines: list[tuple[str, Headline]] = []
         self.live_paused = False
         self._live_timer = None
         self._body: MainScreen | None = None
@@ -300,55 +318,77 @@ class BsblApp(App):
         return self.teams[self.current_index]
 
     @work(exclusive=True)
-    async def load_current_team(self) -> None:
+    async def load_current_team(self, *, refresh_headlines: bool = True) -> None:
         followed = self.current_team
         if not followed or not self._body:
             return
         if followed.is_players_page:
-            await self._load_players_page()
+            await self._load_players_page(refresh_headlines=refresh_headlines)
             return
         team = followed.info
+        stats_fetch = self.stats_service.fetch_player_stats(team) if self._body.show_stats else _no_stats()
         try:
-            box = await self.stats_service.fetch_game_for_team(team)
-            stats = await self.stats_service.fetch_player_stats(team) if self._body.show_stats else []
+            if refresh_headlines:
+                box, stats, web_headlines = await asyncio.gather(
+                    self.stats_service.fetch_game_for_team(team),
+                    stats_fetch,
+                    self._fetch_web_headlines(f"{team.full_name} MLB"),
+                )
+            else:
+                box, stats = await asyncio.gather(
+                    self.stats_service.fetch_game_for_team(team),
+                    stats_fetch,
+                )
         except MlbStatsError as e:
             self.notify(f"Could not load {team.full_name}: {e}", severity="error")
             return
 
-        web_headlines = await self._fetch_web_headlines(f"{team.full_name} MLB")
-        merged = merge_headlines([web_headlines])
-        relevant = headlines_for_team(merged, team_city=team.city, team_name=team.name)
+        if refresh_headlines:
+            merged = merge_headlines([web_headlines])
+            self._cached_headlines = headlines_for_team(merged, team_city=team.city, team_name=team.name)
 
         self.last_updated = datetime.now().astimezone()
         self._body.render_team(
-            team, box, relevant, stats,
+            team, box, self._cached_headlines, stats,
             last_updated=self.last_updated, paused=self.live_paused,
             page=self.current_index + 1, total_pages=len(self.teams),
         )
         if box.status.value == "FINAL" and self._live_timer:
             self._live_timer.pause()
 
-    async def _load_players_page(self) -> None:
-        players = config.load_players()
-        stats: list[PlayerStat] = []
-        player_headlines: list[tuple[str, Headline]] = []
-        for player in players:
-            person_id = player.get("player_id")
-            name = player.get("name", "?")
-            position = player.get("position", "")
-            try:
-                stat = await self.stats_service.fetch_player_stat(person_id, name, position)
-            except MlbStatsError:
-                stat = PlayerStat(name=name, position=position, is_pitcher=position == "P", has_stats=False)
-            stats.append(stat)
+    async def _load_one_player(
+        self, player: dict, *, refresh_headline: bool
+    ) -> tuple[PlayerStat, tuple[str, Headline] | None]:
+        person_id = player.get("player_id")
+        name = player.get("name", "?")
+        position = player.get("position", "")
 
-            headline = await self._fetch_player_headline(name)
-            if headline:
-                player_headlines.append((name, headline))
+        async def get_stat() -> PlayerStat:
+            try:
+                return await self.stats_service.fetch_player_stat(person_id, name, position)
+            except MlbStatsError:
+                return PlayerStat(name=name, position=position, is_pitcher=position == "P", has_stats=False)
+
+        if refresh_headline:
+            stat, headline = await asyncio.gather(get_stat(), self._fetch_player_headline(name))
+        else:
+            stat, headline = await get_stat(), None
+        return stat, ((name, headline) if headline else None)
+
+    async def _load_players_page(self, *, refresh_headlines: bool = True) -> None:
+        players = config.load_players()
+        results = (
+            await asyncio.gather(*(self._load_one_player(p, refresh_headline=refresh_headlines) for p in players))
+            if players else []
+        )
+
+        stats = [stat for stat, _ in results]
+        if refresh_headlines:
+            self._cached_player_headlines = [entry for _, entry in results if entry is not None]
 
         self.last_updated = datetime.now().astimezone()
         self._body.render_players_page(
-            stats, player_headlines,
+            stats, self._cached_player_headlines,
             last_updated=self.last_updated, paused=self.live_paused,
             page=self.current_index + 1, total_pages=len(self.teams),
         )
@@ -365,14 +405,17 @@ class BsblApp(App):
         public feeds, not an internal/undocumented API.
         """
         try:
-            google, bing = await fetch_google_news(self._http, query), await fetch_bing_news(self._http, query)
+            google, bing = await asyncio.gather(
+                fetch_google_news(self._http, query),
+                fetch_bing_news(self._http, query),
+            )
             return [*google, *bing]
         except Exception:
             return []
 
     def _auto_refresh(self) -> None:
         if not self.live_paused:
-            self.load_current_team()
+            self.load_current_team(refresh_headlines=False)
 
     def _update_hints(self) -> None:
         # Only the hotkeys someone reaches for constantly. Stats (s),
@@ -429,6 +472,12 @@ class BsblApp(App):
             return
         self._body.show_batting = not self._body.show_batting
         self.load_current_team()
+
+    def action_toggle_headlines(self) -> None:
+        if not self._body:
+            return
+        self._body.show_headlines = not self._body.show_headlines
+        self.load_current_team(refresh_headlines=False)
 
     def action_refresh_now(self) -> None:
         self.load_current_team()

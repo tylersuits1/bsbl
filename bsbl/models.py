@@ -99,3 +99,13 @@ class BoxScore:
     scheduled_start: datetime | None = None
     next_game: NextGameInfo | None = None
     followed_team_record: str = ""
+
+    # Live at-bat state — populated only while status is LIVE/DELAYED.
+    balls: int = 0
+    strikes: int = 0
+    outs: int = 0
+    at_bat_batter: str = ""
+    at_bat_pitcher: str = ""
+    first_occupied: bool = False
+    second_occupied: bool = False
+    third_occupied: bool = False
