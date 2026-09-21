@@ -25,7 +25,8 @@ _KEYS = [
 _PICKER_KEYS = [
     ("type to search", "Search teams by name or city"),
     ("enter", "Expand/collapse a division, or follow/unfollow a team"),
-    ("escape", "Ask to exit, listing your followed teams (y/n)"),
+    ("shift+enter", "Save & close — works even while still typing a search"),
+    ("escape", "Ask to exit, listing your followed teams (n cancels)"),
 ]
 
 

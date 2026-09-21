@@ -86,10 +86,12 @@ and stop once the game goes final.
 In the team picker (`a`): browse by league → division, or type to
 search by team name/city. A pinned "PLAYERS" entry at the top opens a
 separate screen to search and follow individual players by name — back
-button or `escape` returns to the team list. Division groups start
-collapsed; `enter` expands one, or follows/unfollows a team. `escape`
-on the team list asks you to confirm (y/n) before exiting, listing
-everything you're following.
+button, `escape`, or `shift+enter` returns to the team list. Division
+groups start collapsed; `enter` expands one, or follows/unfollows a
+team. `shift+enter` saves and closes immediately, from anywhere on the
+screen — including mid-search, without needing to clear the search box
+first. `escape` instead asks you to confirm (`n` cancels) before
+exiting, listing everything you're following.
 
 ## Project layout
 

@@ -24,17 +24,18 @@ _SEARCH_PLACEHOLDER = "Search teams, or leave blank to browse"
 class TeamPickerScreen(Screen):
     BINDINGS = [
         Binding("escape", "request_exit", "Back"),
-        Binding("y", "confirm_yes", "Confirm"),
+        Binding("shift+enter", "confirm_yes", "Save & Close"),
         Binding("n", "confirm_no", "Cancel"),
         # Shadow the main app's remaining global hotkeys so they don't
         # leak into this screen's footer, or silently mutate the hidden
         # page behind it (e.g. pressing 's' here toggling its stats panel).
         Binding("s", "noop", show=False),
         Binding("b", "noop", show=False),
+        Binding("h", "noop", show=False),
         Binding("r", "noop", show=False),
         Binding("a", "noop", show=False),
         Binding("p", "noop", show=False),
-        Binding("d", "noop", show=False),
+        Binding("z", "noop", show=False),
         Binding("question_mark", "noop", show=False),
     ]
 
@@ -184,7 +185,7 @@ class TeamPickerScreen(Screen):
         text = (
             "[bold]Exit team picker with these teams?[/bold]\n\n"
             f"{listing}\n\n"
-            "[dim]y = yes, back to the pages   ·   n = no, keep browsing[/dim]"
+            "[dim]shift+enter = yes, back to the pages   ·   n = no, keep browsing[/dim]"
         )
         self.query_one("#confirm-box", Static).update(text)
         self.query_one("#search-row", Horizontal).display = False
@@ -192,8 +193,11 @@ class TeamPickerScreen(Screen):
         self.query_one("#confirm-box", Static).display = True
 
     def action_confirm_yes(self) -> None:
-        if not self._confirming:
-            return
+        """Save & close — works from anywhere on this screen (browsing,
+        mid-search, or at the exit confirmation), not just once Escape
+        has brought up the confirm box. shift+enter never types into
+        the search box the way a plain 'y' would if it still had focus.
+        """
         self.dismiss()
 
     def action_confirm_no(self) -> None:

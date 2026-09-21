@@ -107,7 +107,7 @@ async def main() -> None:
 
         await pilot.press("escape")
         await pilot.pause(0.2)
-        await pilot.press("y")
+        await pilot.press("shift+enter")
         await pilot.pause(0.5)
         assert len(app.screen_stack) == 1
 
