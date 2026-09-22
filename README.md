@@ -16,7 +16,10 @@ account, nothing to sign up for, and no undocumented internal API to
 lean on.
 
 <p align="center">
-  <img src="screenshots/main-page.svg" alt="A team's game page — masthead, matchup, box score, batting order, player stats" width="700">
+  <img src="screenshots/main-page.svg" alt="A team's game page during a live game — masthead, live at-bat state (batter/pitcher, count, outs, bases), box score, batting order, player stats" width="700">
+</p>
+<p align="center">
+  <img src="screenshots/scoring-plays.svg" alt="The scoring-plays recap screen — every play that put a run on the board, grouped by inning" width="700">
 </p>
 <p align="center">
   <img src="screenshots/team-picker.svg" alt="The team picker — browse by league/division or search" width="700">
