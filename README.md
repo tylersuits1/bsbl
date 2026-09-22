@@ -40,10 +40,14 @@ base.
 **Homebrew** (macOS/Linux):
 
 ```bash
-brew install tylersuits1/bsbl/bsbl
+brew tap tylersuits1/bsbl https://github.com/tylersuits1/bsbl
+brew install bsbl
 ```
 
-(the formula lives in this repo, at [`Formula/bsbl.rb`](Formula/bsbl.rb) — no separate tap repo)
+(the formula lives in this repo, at [`Formula/bsbl.rb`](Formula/bsbl.rb) — no separate
+`homebrew-bsbl` tap repo, so it needs that explicit tap URL rather than
+the `brew install tylersuits1/bsbl/bsbl` shorthand, which assumes a
+`homebrew-<name>` repo by convention)
 
 **From source:**
 
