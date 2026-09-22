@@ -18,18 +18,19 @@ _ORDINAL_WORDS = [
 
 def format_full_date(dt: datetime) -> str:
     """'Sat, Aug 29, 2026' — masthead only."""
-    return dt.strftime("%a, %b %-d, %Y")
+    return f"{dt.strftime('%a, %b')} {dt.day}, {dt.strftime('%Y')}"
 
 
 def format_short_date(dt: datetime) -> str:
     """'Sat, Aug 29' — no year, for the page body."""
-    return dt.strftime("%a, %b %-d")
+    return f"{dt.strftime('%a, %b')} {dt.day}"
 
 
 def format_clock_time(dt: datetime) -> str:
     """'4:10 PM' in local time."""
     local = dt.astimezone()
-    return local.strftime("%-I:%M %p")
+    hour = local.hour % 12 or 12
+    return f"{hour}:{local.strftime('%M %p')}"
 
 
 def format_short_datetime(dt: datetime) -> str:

@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Full Python range on Linux (cheap/fast); one representative
+        # version each on the platforms we actually claim to support
+        # (README: "Homebrew (macOS/Linux)") plus every macOS version
+        # GitHub currently hosts, to catch anything a macOS update
+        # breaks. Windows isn't a supported platform, but it's included
+        # here too since it's the one place platform-specific bugs
+        # (e.g. non-portable strftime flags) have actually bitten this
+        # project before — keeps the whole suite honest for free.
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-13    # Ventura
+            python-version: "3.12"
+          - os: macos-14    # Sonoma
+            python-version: "3.12"
+          - os: macos-15    # Sequoia
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install bsbl with dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: pytest -v

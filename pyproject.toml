@@ -9,6 +9,12 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
 [project.scripts]
 bsbl = "bsbl.__main__:run"
 
@@ -18,3 +24,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bsbl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+asyncio_mode = "auto"

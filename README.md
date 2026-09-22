@@ -115,11 +115,30 @@ bsbl/
 
 ## Testing
 
-No live game finishing during development makes the "up next" /
-completed-game path hard to eyeball manually, so there's a headless
-smoke test that drives the real app (via Textual's test pilot) against
-live data and asserts on state — team switching, panel toggles, live
-data actually arriving:
+**Unit tests** (`tests/unit/`) — offline, deterministic, no network or
+real `~/.config/bsbl`: rendering, MLB Stats API response parsing, RSS
+parsing, config persistence, date formatting, team lookups. Fixture
+JSON in `test_mlb_api.py` mirrors real recorded API response shapes,
+not an invented schema.
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+These run in CI (`.github/workflows/tests.yml`) on every push/PR,
+across Linux, three macOS versions (Ventura/Sonoma/Sequoia, to catch
+anything an OS update breaks), and Windows — even though Windows isn't
+a supported install target (Homebrew is macOS/Linux only), it's kept
+in the matrix since a non-portable `strftime` flag once broke the
+masthead date there.
+
+**Manual live smoke tests** (`tests/`) — a no live game finishing
+during development makes the "up next" / completed-game path hard to
+eyeball manually, so these drive the real app (via Textual's test
+pilot) against *live* MLB data and assert on state — team switching,
+panel toggles, live data actually arriving. Not run in CI (network-
+and live-game-dependent); run by hand:
 
 ```bash
 python tests/smoke_test.py
