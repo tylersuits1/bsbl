@@ -69,7 +69,10 @@ def test_status_text_styles_by_status():
 
 
 def test_status_line_scheduled_shows_start_time(box_score):
-    start = datetime(2026, 8, 29, 19, 20, tzinfo=timezone(timedelta(hours=-4)))
+    # Naive — format_short_datetime/format_clock_time call .astimezone(),
+    # which for a naive input is a system-local no-op, keeping this
+    # assertion true regardless of the machine's actual timezone.
+    start = datetime(2026, 8, 29, 19, 20)
     box = box_score(status=GameStatus.SCHEDULED, scheduled_start=start)
     text = render(status_line(box))
     assert "SCHEDULED" in text
@@ -287,12 +290,12 @@ def test_refresh_status_line_not_yet_updated():
 
 
 def test_refresh_status_line_shows_time():
-    dt = datetime(2026, 8, 29, 16, 10, tzinfo=timezone(timedelta(hours=-4)))
+    dt = datetime(2026, 8, 29, 16, 10)  # naive — see test_status_line_scheduled_shows_start_time
     assert render(refresh_status_line(dt, False)) == "Last updated 4:10 PM"
 
 
 def test_refresh_status_line_paused_prefix():
-    dt = datetime(2026, 8, 29, 16, 10, tzinfo=timezone(timedelta(hours=-4)))
+    dt = datetime(2026, 8, 29, 16, 10)  # naive — see test_status_line_scheduled_shows_start_time
     text = render(refresh_status_line(dt, True))
     assert text.startswith("⏸ PAUSED")
     assert "Last updated 4:10 PM" in text

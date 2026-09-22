@@ -49,7 +49,11 @@ def test_format_short_date_has_no_year():
     ],
 )
 def test_format_clock_time(hour, minute, expected):
-    dt = datetime(2026, 8, 5, hour, minute, tzinfo=_EASTERN)
+    # Naive (no tzinfo) so `.astimezone()` treats it as already being in
+    # the system's local time and converts TO the system's local time —
+    # a no-op wall-clock-wise, whatever timezone the machine running
+    # this test actually happens to be in (dev laptop, CI runner, ...).
+    dt = datetime(2026, 8, 5, hour, minute)
     assert format_clock_time(dt) == expected
 
 
@@ -62,7 +66,7 @@ def test_format_clock_time_converts_to_local():
 
 
 def test_format_short_datetime_combines_date_and_time():
-    dt = datetime(2026, 8, 5, 16, 10, tzinfo=_EASTERN)
+    dt = datetime(2026, 8, 5, 16, 10)  # naive — see test_format_clock_time
     assert format_short_datetime(dt) == "Wed, Aug 5 · 4:10 PM"
 
 
